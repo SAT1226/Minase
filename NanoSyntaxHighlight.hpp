@@ -5,12 +5,15 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <cstring>
 
 #include <regex.h>
 #include <dirent.h>
 #include <sys/types.h>
 
 class NanoSyntaxHighlight {
+  friend class NanoSyntaxHighlightTest;
+
 public:
   NanoSyntaxHighlight() :tabsize_(-1), lineNumbers_(false) {}
 
@@ -34,15 +37,16 @@ public:
 
         regexNormal(txt, rStr, fcolor, bcolor, hlRuleList[i].icase);
       }
-      else if(hlRuleList[i].regex.find_first_of("start") == 0 && i + 1 < hlRuleList.size() &&
-              hlRuleList[i + 1].regex.find_first_of("end") == 0) {
-        auto rStr1 = removeQuotationMark(hlRuleList[i].regex);
-        auto rStr2 = removeQuotationMark(hlRuleList[i + 1].regex);
+      else if(stringStartWith(hlRuleList[i].regex, "start") && i + 1 < hlRuleList.size() &&
+              stringStartWith(hlRuleList[i + 1].regex, "end")) {
+        auto rStr1 = getSurroundDoubleQuotation(hlRuleList[i].regex);
+        auto rStr2 = getSurroundDoubleQuotation(hlRuleList[i + 1].regex);
 
         int fcolor = getColorCode(hlRuleList[i].fcolor);
         int bcolor = getColorCode(hlRuleList[i].bcolor) + 10;
 
-        regexSurround(txt, rStr1, rStr2, fcolor, bcolor);
+        regexSurround(txt, rStr1, rStr2, fcolor, bcolor,
+                      hlRuleList[i].icase, hlRuleList[i + 1].icase);
       }
     }
 
@@ -149,7 +153,7 @@ public:
 
         auto splitTxt = splitText(rbuf);
         if(splitTxt[0] == "syntax") {
-          hightlight.name = removeQuotationMark(splitTxt[1]);
+          hightlight.name = getSurroundDoubleQuotation(splitTxt[1]);
 
           for(size_t i = 2; i < splitTxt.size(); ++i)
             hightlight.fileRegexList.emplace_back(splitTxt[i]);
@@ -192,6 +196,10 @@ public:
   }
 
 private:
+  bool stringStartWith(const std::string& str, const std::string& start) {
+    return strncmp(str.c_str(), start.c_str(), start.length()) == 0;
+  }
+
   int getHighlightType(const std::string& fileName) {
 
     int n = -1;
@@ -201,7 +209,7 @@ private:
         regex_t re;
         regmatch_t m[1];
 
-        auto rstr = removeQuotationMark(regex);
+        auto rstr = getSurroundDoubleQuotation(regex);
         regcomp(&re, rstr.c_str(),
                 REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
 
@@ -303,19 +311,22 @@ private:
   }
 
   void regexSurround(const std::string& txt, const std::string& sreg, const std::string& ereg,
-                     int fcolor, int bcolor) {
+                     int fcolor, int bcolor, bool icase1, bool icase2) {
     regmatch_t m[1];
     regex_t re1, re2;
 
+    int cflag1 = icase1 ? REG_EXTENDED|REG_ICASE : REG_EXTENDED;
+    int cflag2 = icase2 ? REG_EXTENDED|REG_ICASE : REG_EXTENDED;
+
     if(sreg[0] != '^' && sreg.find_first_of('$') == std::string::npos)
-      regcomp(&re1, sreg.c_str(), REG_EXTENDED);
+      regcomp(&re1, sreg.c_str(), cflag1);
     else
-      regcomp(&re1, sreg.c_str(), REG_EXTENDED|REG_NEWLINE);
+      regcomp(&re1, sreg.c_str(), cflag1|REG_NEWLINE);
 
     if(ereg[0] != '^' && ereg.find_first_of('$') == std::string::npos)
-      regcomp(&re2, ereg.c_str(), REG_EXTENDED);
+      regcomp(&re2, ereg.c_str(), cflag2);
     else
-      regcomp(&re2, ereg.c_str(), REG_EXTENDED|REG_NEWLINE);
+      regcomp(&re2, ereg.c_str(), cflag2|REG_NEWLINE);
 
     int begin = 0, end = 0;
     const char* ptxt = txt.c_str();
@@ -364,7 +375,7 @@ private:
     return result;
   }
 
-  std::string removeQuotationMark(const std::string& str) const {
+  std::string getSurroundDoubleQuotation(const std::string& str) const {
     auto begin = str.find_first_of('"');
     auto end = str.find_last_of('"');
 
