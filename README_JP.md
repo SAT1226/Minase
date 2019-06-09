@@ -71,7 +71,7 @@ optional:
 
 終了時にcdするには:
 ```
- $ minase; cd "`cat ~/.config/Minase/lastdir`"
+ $ minase; if [ -f ~/.config/Minase/lastdir ]; then cd "`cat ~/.config/Minase/lastdir`"; rm ~/.config/Minase/lastdir; fi;
 ```
 ## Installation
 ```
