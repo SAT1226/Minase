@@ -259,6 +259,9 @@ public:
   }
   bool isDir() const { return dir_; }
   bool isLink() const { return S_ISLNK(lstat_.st_mode); }
+  bool isFifo() const { return S_ISFIFO(lstat_.st_mode); }
+  bool isSock() const { return S_ISSOCK(lstat_.st_mode); }
+
   bool isExe() const {
     if(S_ISREG(lstat_.st_mode))
       return lstat_.st_mode & S_IXUSR;
@@ -832,6 +835,12 @@ private:
 
     if(fileInfo.isDir()) {
       textBuf = getPreviewDir(fileInfo);
+    }
+    else if(fileInfo.isFifo()) {
+      textBuf.push_back("\e[7;1mfifo\e[27;22m");
+    }
+    else if(fileInfo.isSock()) {
+      textBuf.push_back("\e[7;1msock\e[27;22m");
     }
     else {
       FILE* fp;
