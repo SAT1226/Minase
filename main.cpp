@@ -2161,15 +2161,18 @@ private:
       {
         auto c = getInput("Quit? (y/N)");
         if(c == 'y' || c == 'Y') {
-          std::string filename = std::string(getenv("HOME")) + "/.config/Minase/lastdir";
-          FILE *fp;
+          auto home = getenv("HOME");
 
-          if((fp = fopen(filename.c_str(), "w")) != NULL) {
-            fprintf(fp, "%s",
-                    fileViews_[currentFileView_] -> getPath().c_str());
-            fclose(fp);
+          if(home != 0) {
+            std::string filename = std::string(home) + "/.config/Minase/lastdir";
+            FILE *fp;
+
+            if((fp = fopen(filename.c_str(), "w")) != NULL) {
+              fprintf(fp, "%s",
+                      fileViews_[currentFileView_] -> getPath().c_str());
+              fclose(fp);
+            }
           }
-
           return false;
         }
         else return true;
@@ -2207,14 +2210,26 @@ private:
       break;
 
     case '!':
-      spawn(getenv("SHELL"), "", "",
-            fileViews_[currentFileView_] -> getPath());
-      resize();
-      preViewDraw = false;
+      {
+        auto shell = getenv("SHELL");
+
+        if(shell == 0) printInfoMessage("SHELL environment variable not set.");
+        else {
+          spawn(shell, "", "",
+                fileViews_[currentFileView_] -> getPath());
+          resize();
+          preViewDraw = false;
+        }
+      }
       break;
 
     case '@':
-      fileViews_[currentFileView_] -> setPath(std::string(getenv("HOME")) + "/");
+      {
+        auto home = getenv("HOME");
+
+        if(home == 0) fileViews_[currentFileView_] -> setPath("/");
+        else fileViews_[currentFileView_] -> setPath(std::string(home) + "/");
+      }
       break;
 
     case 'a':
@@ -2529,7 +2544,13 @@ private:
 
   bool editFile() {
     if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
-      spawn(getenv("EDITOR"),
+      auto editor = getenv("EDITOR");
+      if(editor == 0) {
+        printInfoMessage("EDITOR environment variable not set.");
+        return false;
+      }
+
+      spawn(editor,
             fileViews_[currentFileView_] -> getCurrentFilePath().c_str(),
             "", fileViews_[currentFileView_] -> getPath());
       resize();
@@ -2744,6 +2765,8 @@ private:
   }
 
   void updateCmdCache() {
+    if(getenv("PATH") == 0) return;
+
     std::istringstream stream(std::string(getenv("PATH")));
     std::string path;
 
@@ -2771,7 +2794,9 @@ private:
 int main(int argc, char **argv)
 {
   setlocale(LC_ALL, "");
-  config.LoadFile(std::string(getenv("HOME")) + "/.config/Minase/config.ini");
+
+  if(getenv("HOME") != 0)
+    config.LoadFile(std::string(getenv("HOME")) + "/.config/Minase/config.ini");
 
   int init = tb_init();
   if(init) {
