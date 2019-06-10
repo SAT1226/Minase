@@ -918,6 +918,12 @@ private:
       else if(f.isExe()) {
         result.emplace_back("\e[32;1m" + f.getFileName());
       }
+      else if(f.isFifo()) {
+        result.emplace_back("\e[33m" + f.getFileName());
+      }
+      else if(f.isSock()) {
+        result.emplace_back("\e[35;1m" + f.getFileName());
+      }
       else if(f.isLink()) {
         result.emplace_back("\e[36;1m" + f.getFileName());
       }
@@ -1502,6 +1508,12 @@ public:
 
       if(fileInfo.isExe())
         color = TB_GREEN | TB_BOLD;
+
+      if(fileInfo.isFifo())
+        color = TB_YELLOW;
+
+      if(fileInfo.isSock())
+        color = TB_MAGENTA | TB_BOLD;
 
       if(fileInfo.isLink())
         color = TB_CYAN | TB_BOLD;
