@@ -50,7 +50,7 @@ public:
              nanorcPath_("/usr/share/nano"), opener_("xdg-open")
   {}
 
-  bool LoadFile(const std::string& fileName) {
+  bool LoadConfig(const std::string& fileName) {
     INIReader reader(fileName);
 
     if(reader.ParseError() != 0) {
@@ -71,6 +71,28 @@ public:
     return true;
   }
 
+  bool LoadBookmarks(const std::string& fileName) {
+    FILE* fp;
+
+    if((fp = fopen(fileName.c_str(), "r")) == NULL)
+      return false;
+
+    char buf[4096];
+    while(!feof(fp)) {
+      if(fgets(buf, sizeof(buf), fp) != 0) {
+        std::string bookmark(buf);
+
+        if(bookmark.back() == '\n') bookmark.pop_back();
+        if(bookmark.back() == '\r') bookmark.pop_back();
+
+        bookmarks_.emplace_back(bookmark);
+      }
+    }
+
+    fclose(fp);
+    return true;
+  }
+
   int getLogMaxLines() const { return logMaxlines_; }
   int getPreViewMaxLines() const { return preViewMaxlines_; }
   int getFileViewType() const { return fileViewType_; }
@@ -80,6 +102,7 @@ public:
   bool wcwidthCJK() const { return wcwidthCJK_; }
   std::string getNanorcPath() const { return nanorcPath_; }
   std::string getOpener() const { return opener_; }
+  std::vector<std::string> getBookmarks() const { return bookmarks_; }
 
 private:
   int logMaxlines_;
@@ -89,6 +112,7 @@ private:
   bool useTrash_;
   bool wcwidthCJK_;
   std::string nanorcPath_, opener_;
+  std::vector<std::string> bookmarks_;
 };
 
 Config config;
@@ -1895,6 +1919,166 @@ public:
     preView_(fileViews_[0] -> getCurrentFileInfo()),
     currentFileView_(0) {}
 
+  int menuMode(const std::string& title, const std::vector<std::string>& menuItems) {
+    struct tb_event ev;
+    int cursor = 0, scrollTop = 0;
+    preView_.clear();
+    fflush(stdout);
+    tb_clear();
+    drawMenuMode(title, menuItems, scrollTop, cursor);
+
+    while(1) {
+      auto eventStatus = tb_peek_event(&ev, 20);
+      if(!eventStatus) continue;
+
+      tb_clear();
+
+      switch (ev.type) {
+      case TB_EVENT_KEY:
+        switch (ev.key) {
+        case TB_KEY_ARROW_LEFT:
+          ev.ch = 'h';
+          break;
+
+        case TB_KEY_ARROW_RIGHT:
+          ev.ch = 'l';
+          break;
+
+        case TB_KEY_ARROW_DOWN:
+          ev.ch = 'j';
+          break;
+
+        case TB_KEY_ARROW_UP:
+          ev.ch = 'k';
+          break;
+
+        case TB_KEY_ENTER:
+          ev.ch = 'l';
+          break;
+
+        case TB_KEY_PGDN:
+        case TB_KEY_CTRL_D:
+          {
+            int scroll = (tb_height() - 5) / 2;
+            if(cursor + scroll < static_cast<int>(menuItems.size())) {
+              cursor += scroll;
+
+              if(cursor + scroll < static_cast<int>(menuItems.size()))
+                scrollTop = cursor - scroll;
+              else scrollTop = menuItems.size() - 1 - (tb_height() - 5);
+            }
+            else {
+              cursor = menuItems.size() - 1;
+              scrollTop = cursor - (tb_height() - 5);
+            }
+          }
+          break;
+
+        case TB_KEY_PGUP:
+        case TB_KEY_CTRL_U:
+          {
+            int scroll = (tb_height() - 5) / 2;
+            if(cursor - scroll > 0) {
+              cursor -= scroll;
+
+              if(cursor - scroll > 0)
+                scrollTop = cursor - scroll;
+              else scrollTop = 0;
+            }
+            else {
+              cursor = 0;
+              scrollTop = 0;
+            }
+            break;
+          }
+        };
+
+        switch (ev.ch) {
+        case 'q':
+        case 'h':
+          return -1;
+
+        case 'l':
+          return cursor;
+
+        case 'H':
+          cursor = scrollTop;
+          break;
+
+        case 'L':
+          cursor = scrollTop + tb_height() - 5;
+          break;
+
+        case 'M':
+          cursor = scrollTop + (tb_height() - 5) / 2;
+          break;
+
+        case 'g':
+          cursor = scrollTop = 0;
+          break;
+
+        case 'G':
+          cursor = menuItems.size() - 1;
+          scrollTop = cursor - (tb_height() - 5);
+          break;
+
+        case 'j':
+          if(cursor < static_cast<int>(menuItems.size() - 1))
+            ++cursor;
+
+          if(cursor > scrollTop + tb_height() - 5) ++scrollTop;
+          break;
+
+        case 'k':
+          if(cursor > 0) {
+            --cursor;
+          }
+          if(cursor < scrollTop) --scrollTop;
+
+          break;
+        }
+        break;
+
+      case TB_EVENT_RESIZE:
+        break;
+      }
+
+      drawMenuMode(title, menuItems, scrollTop, cursor);
+    }
+  }
+
+  void drawMenuMode(const std::string& title, const std::vector<std::string>& menuItems, int scrollTop, int cursor) {
+
+    drawText(tb_width() / 2 + 2, 1, "[");
+    int len = drawText(tb_width() / 2 + 3, 1, title, TB_CYAN | TB_BOLD);
+    drawText(tb_width() / 2 + 2 + len + 1, 1, "]");
+
+    std::string txt = std::to_string(cursor);
+    txt += "/" + std::to_string((menuItems.size() == 0) ? 0 : menuItems.size() - 1);
+    drawText(tb_width() - 2 - txt.length(), 1, txt.c_str());
+
+    for(int i = 0; i < tb_height() - 4; ++i) {
+      int color = 0;
+      if(i + scrollTop == cursor) color = TB_REVERSE;
+      if(i + scrollTop < static_cast<int>(menuItems.size())) {
+        auto txt = menuItems[i + scrollTop];
+        if(txt.back() == '\n') txt.pop_back();
+
+        drawText(tb_width() / 2 + 2, i + 2, txt, color);
+      }
+    }
+
+    printTask();
+    printCurrentPath(fileViews_[currentFileView_] -> getPath());
+
+    printCurrentFileInfo();
+    printInfoMessage("");
+
+    fileViews_[currentFileView_] -> draw();
+
+    tb_present();
+  }
+
   void logViewMode() {
     int line = 0, oldTaskCnt = 0;
 
@@ -1907,7 +2091,7 @@ public:
     drawLogViewMode(logText, line);
 
     while(1) {
-      auto eventStatus = tb_peek_event(&ev, 10);
+      auto eventStatus = tb_peek_event(&ev, 20);
       if(fileOperation_.isLogTextUpdate()) {
         logText = fileOperation_.getLogText();
         tb_clear();
@@ -2236,6 +2420,12 @@ private:
       invertSelection();
       break;
 
+    case 'b':
+      openBookmarks();
+      resize();
+      preViewDraw = false;
+      break;
+
     case 'H':
       fileViews_[currentFileView_] -> cursorMoveTopOfScreen();
       break;
@@ -2332,6 +2522,26 @@ private:
     };
 
     return true;
+  }
+
+  void openBookmarks() {
+    auto bookmarks = config.getBookmarks();
+    int n = menuMode("BookMark", bookmarks);
+    if(n != -1) {
+      std::string bookmark = bookmarks[n];
+
+      if(bookmark[0] == '~' && bookmark[1] == '/') {
+        auto home = getenv("HOME");
+        if(home == 0)
+          bookmark[0] = '/';
+        else
+          bookmark = home + std::string(bookmark.begin() + 1, bookmark.end());
+      }
+
+      auto path = realpath(bookmark.c_str(), NULL);
+      fileViews_[currentFileView_] -> setPath(std::string(path) + "/");
+      free(path);
+    }
   }
 
   void invertSelection() {
@@ -2795,8 +3005,10 @@ int main(int argc, char **argv)
 {
   setlocale(LC_ALL, "");
 
-  if(getenv("HOME") != 0)
-    config.LoadFile(std::string(getenv("HOME")) + "/.config/Minase/config.ini");
+  if(getenv("HOME") != 0) {
+    config.LoadConfig(std::string(getenv("HOME")) + "/.config/Minase/config.ini");
+    config.LoadBookmarks(std::string(getenv("HOME")) + "/.config/Minase/bookmarks");
+  }
 
   int init = tb_init();
   if(init) {

@@ -69,6 +69,7 @@ optional:
 |^R| Batch rename (vidir)|
 |!| Spawn SHELL|
 |n| Create file/directory|
+|b| Open Bookmarks|
 
 Quit and cd:
 ```
@@ -112,6 +113,13 @@ SortType = 2
 
 ; 0: Ascending / 1: Descending
 SortOrder = 1
+```
+
+~/.config/Minase/bookmarks    
+```
+~/Download
+~/Documents
+/usr/local
 ```
 
 ## License

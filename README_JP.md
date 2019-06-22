@@ -68,6 +68,7 @@ optional:
 |^R| バッチリネーム (vidir)|
 |!| シェルを起動|
 |n| file/directoryの作成|
+|b| ブックマークを開く|
 
 終了時にcdするには:
 ```
@@ -110,6 +111,13 @@ SortType = 2
 
 ; 0: Ascending / 1: Descending
 SortOrder = 1
+```
+
+~/.config/Minase/bookmarks    
+```
+~/Download
+~/Documents
+/usr/local
 ```
 
 ## License
