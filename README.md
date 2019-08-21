@@ -11,6 +11,7 @@ Minase is terminal file manager.
 * Preview text syntax highlight (use Nano editor syntax highlight files)
 * Preview text auto encodeing
 * Preview audio tags
+* Preview archive files (needs lsar or bsdtar)
 * Preview image using Sixel Graphics (needs img2sixel)
 * FreeDesktop compliant trash (needs trash-cli)
 * Batch rename (needs vidir)
@@ -29,6 +30,7 @@ optional:
 * libsixel
 * trash-cli
 * vidir
+* lsar or bsdtar
 
 ## Usage
 |Keys|Description|

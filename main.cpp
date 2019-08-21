@@ -617,6 +617,70 @@ public:
     return false;
   }
 
+  static bool isArchive(FILE* fp) {
+    fseek(fp, 0L, SEEK_SET);
+
+    unsigned char header[280];
+    fread(header, 1, sizeof(header), fp);
+    fseek(fp, 0L, SEEK_SET);
+
+    // .gz
+    if(header[0] == 0x1F && header[1] == 0x8B && header[2] == 0x08) {
+      return true;
+    }
+    // .bzip2
+    if(header[0] == 0x42 && header[1] == 0x5A && header[2] == 0x68) {
+      if(header[3] < '1' || header[3] > '9') return false;
+
+      if((header[4] == 0x31 && header[5] == 0x41 && header[6] == 0x59 &&
+         header[7] == 0x26 && header[8] == 0x53 && header[9] == 0x59) ||
+         (header[4] == 0x17 && header[5] == 0x72 && header[6] == 0x45 &&
+         header[7] == 0x38 && header[8] == 0x50 && header[9] == 0x90))
+        return true;
+    }
+    // .xz
+    if(header[0] == 0xFD && header[1] == 0x37 && header[2] == 0x7A &&
+       header[3] == 0x58 && header[4] == 0x5A && header[5] == 0x00) {
+      return true;
+    }
+
+    // .zip
+    if(header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04) {
+      return true;
+    }
+    // .7z
+    if(header[0] == 0xBC && header[1] == 0xAF && header[2] == 0x27 && header[3] == 0x1C) {
+      return true;
+    }
+    // .rar
+    if(header[0] == 0x52 && header[1] == 0x61 && header[2] == 0x72 &&
+       header[3] == 0x21 && header[4] == 0x1A && header[5] == 0x07 && header[6] == 0x00) {
+      return true;
+    }
+    // .cab
+    if(header[0] == 0x4D && header[1] == 0x53 && header[2] == 0x43 &&
+       header[3] == 0x46 && header[4] == 0x00 && header[5] == 0x00 &&
+       header[6] == 0x00 && header[7] == 0x00) {
+      return true;
+    }
+    // .lzh
+    if(header[2] == 0x2D && header[3] == 0x6C && header[4] == 0x68 && header[6] == 0x2D) {
+      if((header[5] >= '0' && header[5] <= '7') || header[5] == 'd' || header[5] == 's')
+      return true;
+    }
+    // tar
+    if((header[257] == 0x75 && header[258] == 0x73 && header[259] == 0x74 &&
+        header[260] == 0x61 && header[261] == 0x72 && header[262] == 0x20 &&
+        header[263] == 0x20 && header[264] == 0x00) ||
+       (header[257] == 0x75 && header[258] == 0x73 && header[259] == 0x74 &&
+        header[260] == 0x61 && header[261] == 0x72 && header[262] == 0x00 &&
+        header[263] == 0x30 && header[264] == 0x30)) {
+      return true;
+    }
+
+    return false;
+  }
+
   static bool isBinary(FILE* fp) {
     fseek(fp, 0L, SEEK_SET);
     if(fgetc(fp) == EOF) return true;
@@ -885,6 +949,10 @@ private:
         fclose(fp);
         textBuf = getPreviewAudioTag(fileInfo);
       }
+      else if(CheckFileType::isArchive(fp)) {
+        fclose(fp);
+        textBuf = getPreviewArchive(fileInfo);
+      }
       else if(!CheckFileType::isBinary(fp)) {
         fclose(fp);
         textBuf = getPreviewText(fileInfo);
@@ -897,6 +965,21 @@ private:
 
     implData_.update(fileInfo.getFileName(), textBuf, sixel);
     done_ = true;
+  }
+
+  std::vector<std::string> getPreviewArchive(const FileInfo& fileInfo) {
+    std::vector<std::string> result;
+    std::vector<std::string> args{fileInfo.getFilePath()};
+
+    getProcessText("lsar", args, result);
+    if(result.empty()) {
+      std::vector<std::string> args{"-tf",
+                                    fileInfo.getFilePath()};
+      getProcessText("bsdtar", args, result);
+    }
+    if(result.empty()) result.emplace_back("\e[7;1mbinary\e[27;22m");
+
+    return result;
   }
 
   std::vector<std::string> getPreviewAudioTag(const FileInfo& fileInfo) {

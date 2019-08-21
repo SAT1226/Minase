@@ -10,6 +10,7 @@ Minaseはターミナルで動くファイラーです
 * プレビューテキストのシンタックスハイライト表示 (Nano editorのシンタックスハイライト定義ファイルを使います)
 * プレビューテキストの文字コードを自動認識
 * オーディオファイルのタグをプレビュー表示
+* 圧縮ファイルをプレビュー表示 (lsarまたはbsdtarが必要)
 * Sixel Graphicsを使ったイメージプレビュー (img2sixelが必要)
 * FreeDesktopに準拠したゴミ箱 (trash-cliが必要)
 * バッチリネーム (vidirが必要)
@@ -28,6 +29,7 @@ optional:
 * libsixel
 * trash-cli
 * vidir
+* lsar or bsdtar
 
 ## Usage
 |Keys|Description|
