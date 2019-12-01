@@ -72,6 +72,8 @@ optional:
 |!| Spawn SHELL|
 |n| Create file/directory|
 |b| Open Bookmarks|
+|/| Filter|
+|^/| Change Filter type|
 
 Quit and cd:
 ```
@@ -115,6 +117,9 @@ SortType = 2
 
 ; 0: Ascending / 1: Descending
 SortOrder = 1
+
+; 0: Normal / 1: Regexp
+FilterType = 0
 ```
 
 ~/.config/Minase/bookmarks    

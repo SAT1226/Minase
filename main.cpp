@@ -67,6 +67,7 @@ public:
     fileViewType_ = reader.GetInteger("Options", "FileViewType", 0);
     sortType_ = reader.GetInteger("Options", "SortType", 0);
     sortOrder_ = reader.GetInteger("Options", "SortOrder", 0);
+    filterType_ = reader.GetInteger("Options", "FilterType", 0);
 
     return true;
   }
@@ -98,6 +99,7 @@ public:
   int getFileViewType() const { return fileViewType_; }
   int getSortType() const { return sortType_; }
   int getSortOrder() const { return sortOrder_; }
+  int getFilterType() const { return filterType_; }
   bool useTrash() const { return useTrash_; }
   bool wcwidthCJK() const { return wcwidthCJK_; }
   std::string getNanorcPath() const { return nanorcPath_; }
@@ -109,6 +111,7 @@ private:
   int preViewMaxlines_;
   int fileViewType_;
   int sortType_, sortOrder_;
+  int filterType_;
   bool useTrash_;
   bool wcwidthCJK_;
   std::string nanorcPath_, opener_;
@@ -397,7 +400,7 @@ private:
 class DirInfo {
 public:
   DirInfo(const std::string& path, std::atomic<bool>* kill = 0):
-    hidden_(false), sortType_(SortType::NAME), sortOrder_(SortOrder::ASCENDING) {
+    hidden_(false), sortType_(SortType::NAME), sortOrder_(SortOrder::ASCENDING), filterType_(FilterType::NORMAL) {
 
     switch(config.getSortType()) {
       case 0:
@@ -413,6 +416,15 @@ public:
 
     if(config.getSortOrder() == 0) sortOrder_ = SortOrder::ASCENDING;
     else sortOrder_ = SortOrder::DESCENDING;
+
+    switch(config.getFilterType()) {
+    case 0:
+      filterType_ = FilterType::NORMAL;
+      break;
+    case 1:
+      filterType_ = FilterType::REGEXP;
+      break;
+    };
 
     chdir(path, kill);
   }
@@ -466,6 +478,11 @@ public:
     DESCENDING,
   };
 
+  enum FilterType {
+    NORMAL,
+    REGEXP,
+  };
+
   void sort(SortType type, SortOrder order) {
     if(sortType_ != type || sortOrder_ != order) {
       sortType_ = type;
@@ -476,31 +493,91 @@ public:
   SortType getSortType() const { return sortType_; }
   SortOrder getSortOrder() const { return sortOrder_; }
 
-  void filter(const std::string& filter) {
+  void filter(const std::string& filter, FilterType type) {
     filter_ = filter;
+    filterType_ = type;
+
     filteredFileList();
   }
   std::string getFilter() const {
     return filter_;
   }
+  FilterType getFilterType() const {
+    return filterType_;
+  }
 
 private:
+  class Filter {
+  public:
+    Filter() {}
+    virtual ~Filter() {}
+    virtual bool isMatch(const std::string& fileName) { return false; };
+  };
+
+  class NormalFilter : public Filter {
+  public:
+    NormalFilter(const std::string& filter) {
+      std::stringstream ss{filter};
+      std::string buf;
+      while(std::getline(ss, buf, ' ')) {
+        std::transform(buf.cbegin(), buf.cend(), buf.begin(), toupper);
+        filters_.push_back(buf);
+      }
+    }
+    ~NormalFilter() {}
+
+    bool isMatch(const std::string& fileName) {
+      std::string uFileName;
+      uFileName.resize(fileName.size());
+
+      std::transform(fileName.cbegin(), fileName.cend(), uFileName.begin(), toupper);
+      for(auto filter: filters_) {
+        if(uFileName.find(filter) == std::string::npos) return true;
+      }
+      return false;
+    }
+
+  private:
+    std::vector<std::string> filters_;
+  };
+
+  class RegexpFilter : public Filter {
+  public:
+    RegexpFilter(const std::string& filter) {
+      regcomp(&re_, filter.c_str(),
+              REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+    }
+    ~RegexpFilter() { regfree(&re_); }
+
+    bool isMatch(const std::string& fileName) {
+      if(!(regexec(&re_, fileName.c_str(), 0, m_, 0) != REG_NOMATCH))
+        return true;
+
+      return false;
+    }
+
+  private:
+    regex_t re_;
+    regmatch_t m_[1];
+  };
+
   void filteredFileList() {
     filteredFileList_.clear();
-    regex_t re;
-    regmatch_t m[1];
+    std::unique_ptr<Filter> filterFunc(new Filter);
 
     if(!filter_.empty()) {
-      regcomp(&re, filter_.c_str(),
-              REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+      switch(filterType_) {
+      case NORMAL:
+        filterFunc.reset(new NormalFilter(filter_));
+        break;
+      case REGEXP:
+        filterFunc.reset(new RegexpFilter(filter_));
+        break;
+      };
     }
 
     for(auto&& file: fileList_) {
-      if(!filter_.empty()) {
-        if(!(regexec(&re, file -> getFileName().c_str(), 0, m, 0) != REG_NOMATCH)) {
-          continue;
-        }
-      }
+      if(filterFunc -> isMatch(file -> getFileName())) continue;
 
       if(!hidden_) {
         if(file -> getFileName()[0] != '.')
@@ -509,7 +586,6 @@ private:
       else filteredFileList_.emplace_back(file);
     }
 
-    if(!filter_.empty()) regfree(&re);
     sortList();
   }
 
@@ -563,6 +639,7 @@ private:
   std::vector<std::shared_ptr<FileInfo>> filteredFileList_;
   SortType sortType_;
   SortOrder sortOrder_;
+  FilterType filterType_;
 };
 
 class CheckFileType {
@@ -1404,12 +1481,16 @@ public:
     }
   }
 
-  void filter(const std::string& filter) {
-    dir_.filter(filter);
+  void filter(const std::string& filter, DirInfo::FilterType type) {
+    dir_.filter(filter, type);
   }
 
   std::string getFilter() const {
     return dir_.getFilter();
+  }
+
+  DirInfo::FilterType getFilterType() const {
+    return dir_.getFilterType();
   }
 
   bool update() {
@@ -2424,6 +2505,10 @@ private:
       if(openWith()) preViewDraw = false;
       break;
 
+    case TB_KEY_CTRL_SLASH:
+      setFileViewFilterType();
+      break;
+
     case TB_KEY_CTRL_G:
       {
         auto c = getInput("Quit? (y/N)");
@@ -2876,12 +2961,41 @@ private:
 
   void setFileViewFilter() {
     std::string filter;
-    if(!getReadline("Filter: ", filter)) {
+    char buf[256];
+    char typeName[] = {'N', 'R'};
+    snprintf(buf, sizeof(buf), "Filter[%c]: ", typeName[fileViews_[currentFileView_] -> getFilterType()]);
+
+    if(!getReadline(buf, filter, 0, 0, &filterHistory_)) {
       if(fileViews_[currentFileView_] -> getFilter() != filter) {
-        fileViews_[currentFileView_] -> filter(filter);
+        fileViews_[currentFileView_] -> filter(filter,
+                                               fileViews_[currentFileView_] -> getFilterType());
         fileViews_[currentFileView_] -> setCursorPos(0);
+
+        if(!filter.empty()) {
+          if(filterHistory_.end() != std::find(filterHistory_.begin(), filterHistory_.end(), filter)) {
+            filterHistory_.remove(filter);
+          }
+          filterHistory_.emplace_back(filter);
+        }
       }
     }
+  }
+
+  void setFileViewFilterType() {
+    auto c = getInput("'n'(ormal) 'r'(egexp)");
+    DirInfo::FilterType type;
+    switch(c) {
+    case 'n':
+      type = DirInfo::FilterType::NORMAL;
+      break;
+    case 'r':
+      type = DirInfo::FilterType::REGEXP;
+      break;
+    };
+
+    if(fileViews_[currentFileView_] -> getFilterType() == type) return;
+    fileViews_[currentFileView_] -> filter(fileViews_[currentFileView_] -> getFilter(), type);
+    fileViews_[currentFileView_] -> setCursorPos(0);
   }
 
   void refresh() {
@@ -2907,12 +3021,18 @@ private:
   }
 
   bool getReadline(const std::string& prompt, std::string& buf,
-                   const char* txt = 0, std::vector<std::string>* complist = 0) const {
+                   const char* txt = 0, std::vector<std::string>* complist = 0,
+                   std::list<std::string>* history = 0) const {
     printf("\e[%d;%dH\e[K", tb_height(), 0);
     printf("\e[?25h"); // show cursor
     fflush(stdout);
 
     linenoise::clearHistory();
+    if(history != 0) {
+      for(auto line: *history) {
+        linenoise::AddHistory(line.c_str());
+      }
+    }
 
     if(complist != 0) {
       linenoise::SetCompletionCallback([complist](const char*ch, std::vector<std::string>& comp) {
@@ -3076,6 +3196,7 @@ private:
   FileOperation fileOperation_;
 
   std::vector<std::string> cmdCache_;
+  std::list<std::string> filterHistory_;
   struct Buffer {
     FileOperation::Task::Operation operation;
     std::vector<std::string> selectedFiles;

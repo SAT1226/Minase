@@ -71,6 +71,8 @@ optional:
 |!| シェルを起動|
 |n| file/directoryの作成|
 |b| ブックマークを開く|
+|/| フィルター|
+|^/| フィルターの種類を変更|
 
 終了時にcdするには:
 ```
@@ -113,6 +115,9 @@ SortType = 2
 
 ; 0: Ascending / 1: Descending
 SortOrder = 1
+
+; 0: Normal / 1: Regexp
+FilterType = 0
 ```
 
 ~/.config/Minase/bookmarks    
