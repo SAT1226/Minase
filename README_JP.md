@@ -30,6 +30,7 @@ optional:
 * trash-cli
 * vidir
 * lsar or bsdtar
+* cmigemo
 
 ## Usage
 |Keys|Description|
@@ -116,7 +117,10 @@ SortType = 2
 ; 0: Ascending / 1: Descending
 SortOrder = 1
 
-; 0: Normal / 1: Regexp
+; Migemo Dictionary File
+;MigemoDict = /usr/share/migemo/utf-8/migemo-dict
+
+; 0: Normal / 1: Regexp / 2: Migemo
 FilterType = 0
 ```
 

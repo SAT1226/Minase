@@ -40,6 +40,92 @@
 #include "ImageUtil.hpp"
 #include "TermboxUtil.hpp"
 
+#ifdef USE_MIGEMO
+#include <migemo.h>
+migemo* mgm;
+static const char* DEFAULT_MIGEMO_DICT = "/usr/share/migemo/utf-8/migemo-dict";
+
+/*
++https://github.com/koron/cmigemo
++  charset.c: utf8_int2char
++  rxgen.c: default_int2char
++
++  Copyright (c) 2003-2007 MURAOKA Taro (KoRoN)
++  Released under the MIT license
++  URL: https://github.com/koron/cmigemo/blob/master/doc/LICENSE_MIT.txt
++
++  UTF8 + PCRE用に改変
++*/
+static int utf8pcre_int2char(unsigned int in, unsigned char* out)
+{
+  if(in < 0x80) {
+    int len = 0;
+
+    /* outは最低でも16バイトはある、という仮定を置く */
+    switch(in) {
+    case '\\':
+    case '.': case '*': case '^': case '$': case '/':
+    case ' ': case '(': case ')': case '+':
+    case '-': case '?': case '[': case ']': case '{':
+    case '|': case '}':
+      if(out) out[len] = '\\';
+      ++len;
+    default:
+      if(out) out[len] = (unsigned char)(in & 0xFF);
+      ++len;
+      break;
+    }
+    return len;
+  }
+
+  if(in < 0x800) {
+    if(out) {
+      out[0] = 0xc0 + (in >> 6);
+      out[1] = 0x80 + ((in >> 0) & 0x3f);
+    }
+    return 2;
+  }
+  if(in < 0x10000) {
+    if(out) {
+      out[0] = 0xe0 + (in >> 12);
+      out[1] = 0x80 + ((in >> 6) & 0x3f);
+      out[2] = 0x80 + ((in >> 0) & 0x3f);
+    }
+    return 3;
+  }
+  if(in < 0x200000) {
+    if(out) {
+      out[0] = 0xf0 + (in >> 18);
+      out[1] = 0x80 + ((in >> 12) & 0x3f);
+      out[2] = 0x80 + ((in >> 6) & 0x3f);
+      out[3] = 0x80 + ((in >> 0) & 0x3f);
+    }
+    return 4;
+  }
+  if(in < 0x4000000) {
+    if(out) {
+      out[0] = 0xf8 + (in >> 24);
+      out[1] = 0x80 + ((in >> 18) & 0x3f);
+      out[2] = 0x80 + ((in >> 12) & 0x3f);
+      out[3] = 0x80 + ((in >> 6) & 0x3f);
+      out[4] = 0x80 + ((in >> 0) & 0x3f);
+    }
+    return 5;
+  }
+  else {
+    if(out) {
+      out[0] = 0xf8 + (in >> 30);
+      out[1] = 0x80 + ((in >> 24) & 0x3f);
+      out[2] = 0x80 + ((in >> 18) & 0x3f);
+      out[3] = 0x80 + ((in >> 12) & 0x3f);
+      out[4] = 0x80 + ((in >> 6) & 0x3f);
+      out[5] = 0x80 + ((in >> 0) & 0x3f);
+    }
+    return 6;
+  }
+}
+#endif
+
 const static int TAB_MAX = 4;
 
 class Config {
@@ -68,7 +154,9 @@ public:
     sortType_ = reader.GetInteger("Options", "SortType", 0);
     sortOrder_ = reader.GetInteger("Options", "SortOrder", 0);
     filterType_ = reader.GetInteger("Options", "FilterType", 0);
-
+#ifdef USE_MIGEMO
+    migemoDict_ = reader.Get("Options", "MigemoDict", DEFAULT_MIGEMO_DICT);
+#endif
     return true;
   }
 
@@ -100,6 +188,9 @@ public:
   int getSortType() const { return sortType_; }
   int getSortOrder() const { return sortOrder_; }
   int getFilterType() const { return filterType_; }
+#ifdef USE_MIGEMO
+  std::string getMigemoDict() const { return migemoDict_; }
+#endif
   bool useTrash() const { return useTrash_; }
   bool wcwidthCJK() const { return wcwidthCJK_; }
   std::string getNanorcPath() const { return nanorcPath_; }
@@ -116,6 +207,10 @@ private:
   bool wcwidthCJK_;
   std::string nanorcPath_, opener_;
   std::vector<std::string> bookmarks_;
+
+#ifdef USE_MIGEMO
+  std::string migemoDict_;
+#endif
 };
 
 Config config;
@@ -424,6 +519,11 @@ public:
     case 1:
       filterType_ = FilterType::REGEXP;
       break;
+#ifdef USE_MIGEMO
+    case 2:
+      filterType_ = FilterType::MIGEMO;
+      break;
+#endif
     };
 
     chdir(path, kill);
@@ -481,6 +581,9 @@ public:
   enum FilterType {
     NORMAL,
     REGEXP,
+#ifdef USE_MIGEMO
+    MIGEMO,
+#endif
   };
 
   void sort(SortType type, SortOrder order) {
@@ -511,7 +614,7 @@ private:
   public:
     Filter() {}
     virtual ~Filter() {}
-    virtual bool isMatch(const std::string& fileName) { return false; };
+    virtual bool isMatch(const std::string& fileName) { return true; };
   };
 
   class NormalFilter : public Filter {
@@ -532,9 +635,9 @@ private:
 
       std::transform(fileName.cbegin(), fileName.cend(), uFileName.begin(), toupper);
       for(auto filter: filters_) {
-        if(uFileName.find(filter) == std::string::npos) return true;
+        if(uFileName.find(filter) == std::string::npos) return false;
       }
-      return false;
+      return true;
     }
 
   private:
@@ -551,15 +654,56 @@ private:
 
     bool isMatch(const std::string& fileName) {
       if(!(regexec(&re_, fileName.c_str(), 0, m_, 0) != REG_NOMATCH))
-        return true;
+        return false;
 
-      return false;
+      return true;
     }
 
   private:
     regex_t re_;
     regmatch_t m_[1];
   };
+
+#ifdef USE_MIGEMO
+  class MigemoFilter : public Filter {
+  public:
+    MigemoFilter(const std::string& filter) {
+      std::vector<std::string> filters;
+      std::stringstream ss{filter};
+      std::string buf;
+
+      while(std::getline(ss, buf, ' ')) {
+        std::transform(buf.cbegin(), buf.cend(), buf.begin(), toupper);
+        filters.push_back(buf);
+      }
+
+      for(auto s: filters) {
+        unsigned char* migemo_re = migemo_query(mgm, (unsigned char*)s.c_str());
+        regex_t re;
+
+        regcomp(&re, (char*)migemo_re,
+                REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+
+        filtersRegex_.emplace_back(re);
+      }
+    }
+    ~MigemoFilter() {
+      for(auto re: filtersRegex_) regfree(&re);
+    }
+
+    bool isMatch(const std::string& fileName) {
+      for(auto re: filtersRegex_) {
+        if(!(regexec(&re, fileName.c_str(), 0, m_, 0) != REG_NOMATCH)) return false;
+      }
+
+      return true;
+    }
+
+  private:
+    std::vector<regex_t> filtersRegex_;
+    regmatch_t m_[1];
+  };
+#endif
 
   void filteredFileList() {
     filteredFileList_.clear();
@@ -573,11 +717,16 @@ private:
       case REGEXP:
         filterFunc.reset(new RegexpFilter(filter_));
         break;
+#ifdef USE_MIGEMO
+      case MIGEMO:
+        filterFunc.reset(new MigemoFilter(filter_));
+        break;
+#endif
       };
     }
 
     for(auto&& file: fileList_) {
-      if(filterFunc -> isMatch(file -> getFileName())) continue;
+      if(!(filterFunc -> isMatch(file -> getFileName()))) continue;
 
       if(!hidden_) {
         if(file -> getFileName()[0] != '.')
@@ -2962,7 +3111,7 @@ private:
   void setFileViewFilter() {
     std::string filter;
     char buf[256];
-    char typeName[] = {'N', 'R'};
+    char typeName[] = {'N', 'R', 'M'};
     snprintf(buf, sizeof(buf), "Filter[%c]: ", typeName[fileViews_[currentFileView_] -> getFilterType()]);
 
     if(!getReadline(buf, filter, 0, 0, &filterHistory_)) {
@@ -2982,8 +3131,13 @@ private:
   }
 
   void setFileViewFilterType() {
+#ifdef USE_MIGEMO
+    auto c = getInput("'n'(ormal) 'r'(egexp) 'm'(igemo)");
+#else
     auto c = getInput("'n'(ormal) 'r'(egexp)");
-    DirInfo::FilterType type;
+#endif
+
+    DirInfo::FilterType type = fileViews_[currentFileView_] -> getFilterType();
     switch(c) {
     case 'n':
       type = DirInfo::FilterType::NORMAL;
@@ -2991,6 +3145,11 @@ private:
     case 'r':
       type = DirInfo::FilterType::REGEXP;
       break;
+#ifdef USE_MIGEMO
+    case 'm':
+      type = DirInfo::FilterType::MIGEMO;
+      break;
+#endif
     };
 
     if(fileViews_[currentFileView_] -> getFilterType() == type) return;
@@ -3214,6 +3373,16 @@ int main(int argc, char **argv)
     config.LoadBookmarks(std::string(getenv("HOME")) + "/.config/Minase/bookmarks");
   }
 
+#ifdef USE_MIGEMO
+  mgm = migemo_open(config.getMigemoDict().c_str());
+  if(mgm == MIGEMO_DICTID_INVALID) {
+    std::cerr << "migemo_open() failed." << std::endl;
+    return 1;
+  }
+
+  migemo_setproc_int2char(mgm, (MIGEMO_PROC_INT2CHAR)(utf8pcre_int2char));
+#endif
+
   int init = tb_init();
   if(init) {
     std::cerr << "tb_init() failed with error code: " << init << std::endl;
@@ -3227,6 +3396,10 @@ int main(int argc, char **argv)
   free(currentPath);
 
   minase.run();
+
+#ifdef USE_MIGEMO
+  migemo_close(mgm);
+#endif
 
   // Erase warning
   (void)argc, (void)argv;
