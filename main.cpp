@@ -2271,25 +2271,32 @@ public:
 
         case TB_KEY_PGDN:
         case TB_KEY_CTRL_D:
-          {
+          if(menuItems.size() != 0) {
             int scroll = (tb_height() - 5) / 2;
             if(cursor + scroll < static_cast<int>(menuItems.size())) {
               cursor += scroll;
-
-              if(cursor + scroll < static_cast<int>(menuItems.size()))
-                scrollTop = cursor - scroll;
-              else scrollTop = menuItems.size() - 1 - (tb_height() - 5);
             }
             else {
               cursor = menuItems.size() - 1;
-              scrollTop = cursor - (tb_height() - 5);
             }
+
+            if(cursor > scroll) {
+              if(cursor + scroll < static_cast<int>(menuItems.size())) {
+                scrollTop = cursor - scroll;
+              }
+              else {
+                scrollTop = menuItems.size() - (tb_height() - 4);
+                if(scrollTop < 0) scrollTop = 0;
+              }
+            }
+            else scrollTop = 0;
+
           }
           break;
 
         case TB_KEY_PGUP:
         case TB_KEY_CTRL_U:
-          {
+          if(menuItems.size() != 0) {
             int scroll = (tb_height() - 5) / 2;
             if(cursor - scroll > 0) {
               cursor -= scroll;
@@ -2319,34 +2326,51 @@ public:
           break;
 
         case 'L':
-          cursor = scrollTop + tb_height() - 5;
+          if(menuItems.size() != 0) {
+            cursor = scrollTop + tb_height() - 5;
+            if(scrollTop + tb_height() - 5 > static_cast<int>(menuItems.size() - 1))
+              cursor = menuItems.size() - 1;
+          }
           break;
 
         case 'M':
-          cursor = scrollTop + (tb_height() - 5) / 2;
+          if(menuItems.size() != 0) {
+            cursor = scrollTop + (tb_height() - 5) / 2;
+            if(scrollTop + tb_height() - 5 > static_cast<int>(menuItems.size() - 1))
+              cursor = (menuItems.size() - 1) / 2;
+          }
           break;
 
         case 'g':
-          cursor = scrollTop = 0;
+          if(menuItems.size() != 0) {
+            cursor = scrollTop = 0;
+          }
           break;
 
         case 'G':
-          cursor = menuItems.size() - 1;
-          scrollTop = cursor - (tb_height() - 5);
+          if(menuItems.size() != 0) {
+            cursor = menuItems.size() - 1;
+            scrollTop = cursor - (tb_height() - 5);
+            if(scrollTop < 0) scrollTop = 0;
+          }
           break;
 
         case 'j':
-          if(cursor < static_cast<int>(menuItems.size() - 1))
-            ++cursor;
+          if(menuItems.size() != 0) {
+            if(cursor < static_cast<int>(menuItems.size() - 1))
+              ++cursor;
 
-          if(cursor > scrollTop + tb_height() - 5) ++scrollTop;
+            if(cursor > scrollTop + tb_height() - 5) ++scrollTop;
+          }
           break;
 
         case 'k':
-          if(cursor > 0) {
-            --cursor;
+          if(menuItems.size() != 0) {
+            if(cursor > 0) {
+              --cursor;
+            }
+            if(cursor < scrollTop) --scrollTop;
           }
-          if(cursor < scrollTop) --scrollTop;
 
           break;
         }
