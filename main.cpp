@@ -2868,10 +2868,10 @@ private:
   void openBookmarks() {
     auto bookmarks = config.getBookmarks();
     int n = menuMode("BookMark", bookmarks);
-    if(n != -1) {
+    if(n != -1 && bookmarks.size() > 0) {
       std::string bookmark = bookmarks[n];
 
-      if(bookmark[0] == '~' && bookmark[1] == '/') {
+      if(bookmark.length() >= 2 && bookmark[0] == '~' && bookmark[1] == '/') {
         auto home = getenv("HOME");
         if(home == 0)
           bookmark[0] = '/';
@@ -2880,8 +2880,17 @@ private:
       }
 
       auto path = realpath(bookmark.c_str(), NULL);
-      fileViews_[currentFileView_] -> setPath(std::string(path) + "/");
-      free(path);
+      if(path != NULL) {
+        if(std::string(path) != "/")
+          fileViews_[currentFileView_] -> setPath(std::string(path) + "/");
+        else
+          fileViews_[currentFileView_] -> setPath("/");
+
+        free(path);
+      }
+      else {
+        printInfoMessage(strerror(errno));
+      }
     }
   }
 
