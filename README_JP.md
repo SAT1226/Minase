@@ -74,6 +74,7 @@ optional:
 |b| ブックマークを開く|
 |/| フィルター|
 |^/| フィルターの種類を変更|
+|x| pluginを実行|
 
 終了時にcdするには:
 ```
@@ -129,6 +130,13 @@ FilterType = 0
 ~/Download
 ~/Documents
 /usr/local
+```
+
+~/.config/Minase/plugin.ini    
+```
+# 0:CUI/1:GUI FileName
+1 ~/.config/Minase/plugins/sxiv
+0 ~/.config/Minase/plugins/renamer
 ```
 
 ## License

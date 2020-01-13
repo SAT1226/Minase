@@ -127,6 +127,7 @@ static int utf8pcre_int2char(unsigned int in, unsigned char* out)
 #endif
 
 const static int TAB_MAX = 4;
+static const char* const TMP_FILENAME = "/tmp/minase_tmp";
 
 class Config {
 public:
@@ -182,6 +183,57 @@ public:
     return true;
   }
 
+  struct Plugin {
+    bool gui;
+    std::string fileName;
+  };
+
+  bool LoadPlugins(const std::string& fileName) {
+    FILE* fp;
+
+    if((fp = fopen(fileName.c_str(), "r")) == NULL)
+      return false;
+
+    char buf[4096];
+    while(!feof(fp)) {
+      if(fgets(buf, sizeof(buf), fp) != 0) {
+        std::string txt(buf);
+
+        if(txt.back() == '\n') txt.pop_back();
+        if(txt.back() == '\r') txt.pop_back();
+
+        try {
+          if(txt[0] == '#') continue;
+
+          size_t pos = txt.find_first_not_of(" ");
+          txt = txt.substr(pos);
+
+          if(txt[0] == '0' || txt[0] == '1') {
+            Plugin p;
+
+            if(txt[0] == '0') p.gui = false;
+            if(txt[0] == '1') p.gui = true;
+
+            txt = txt.substr(1);
+            size_t pos = txt.find_first_not_of(" ");
+            txt = txt.substr(pos);
+            p.fileName = txt;
+
+            plugins_.emplace_back(p);
+          }
+          else continue;
+        }
+        catch(std::exception& e) {
+          continue;
+        }
+      }
+    }
+
+    fclose(fp);
+
+    return true;
+  }
+
   int getLogMaxLines() const { return logMaxlines_; }
   int getPreViewMaxLines() const { return preViewMaxlines_; }
   int getFileViewType() const { return fileViewType_; }
@@ -196,6 +248,7 @@ public:
   std::string getNanorcPath() const { return nanorcPath_; }
   std::string getOpener() const { return opener_; }
   std::vector<std::string> getBookmarks() const { return bookmarks_; }
+  std::vector<Plugin> getPlugins() const { return plugins_; }
 
 private:
   int logMaxlines_;
@@ -207,6 +260,7 @@ private:
   bool wcwidthCJK_;
   std::string nanorcPath_, opener_;
   std::vector<std::string> bookmarks_;
+  std::vector<Plugin> plugins_;
 
 #ifdef USE_MIGEMO
   std::string migemoDict_;
@@ -2230,7 +2284,13 @@ public:
                 std::unique_ptr<FileView>(new FileView(initPath)),
                 std::unique_ptr<FileView>(new FileView(initPath))}),
     preView_(fileViews_[0] -> getCurrentFileInfo()),
-    currentFileView_(0) {}
+    currentFileView_(0) {
+    tmpFileName_ = TMP_FILENAME;
+  }
+
+  ~Minase() {
+    remove(tmpFileName_.c_str());
+  }
 
   int menuMode(const std::string& title, const std::vector<std::string>& menuItems) {
     struct tb_event ev;
@@ -2860,9 +2920,54 @@ private:
     case 'h':
       if(!fileViews_[currentFileView_] -> upDir()) printInfoMessage(strerror(errno));
       break;
+
+    case  'x':
+      execPlugin();
+      resize();
+      preViewDraw = false;
+      fileViews_[currentFileView_] -> reload();
+      break;
     };
 
     return true;
+  }
+
+  void execPlugin() {
+    auto plugins = config.getPlugins();
+    std::vector<std::string> pluginNames;
+    for(auto plugin: plugins) {
+      pluginNames.emplace_back(plugin.fileName);
+    }
+
+    int n = menuMode("Plugins", pluginNames);
+    if(n != -1 && plugins.size() > 0) {
+      std::string plugin = plugins[n].fileName;
+
+      if(plugin.length() >= 2 && plugin[0] == '~' && plugin[1] == '/') {
+        auto home = getenv("HOME");
+        if(home == 0) plugin[0] = '/';
+        else plugin = home + std::string(plugin.begin() + 1, plugin.end());
+      }
+
+      FILE* fp;
+      if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
+
+      auto selectFiles = fileViews_[currentFileView_] -> getSelectFiles();
+      for(auto f: selectFiles) {
+        fprintf(fp, "%s\n", f.c_str());
+      }
+      fclose(fp);
+
+      if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
+        spawn(plugin, fileViews_[currentFileView_] -> getCurrentFileName(),
+              tmpFileName_.c_str(), fileViews_[currentFileView_] -> getPath(), plugins[n].gui);
+      }
+      else {
+        spawn(plugin, fileViews_[currentFileView_] -> getPath(),
+              tmpFileName_.c_str(), fileViews_[currentFileView_] -> getPath(), plugins[n].gui);
+      }
+      resize();
+    }
   }
 
   void openBookmarks() {
@@ -3395,6 +3500,7 @@ private:
   };
   Buffer buffer_;
   int currentFileView_;
+  std::string tmpFileName_;
 };
 
 int main(int argc, char **argv)
@@ -3404,6 +3510,7 @@ int main(int argc, char **argv)
   if(getenv("HOME") != 0) {
     config.LoadConfig(std::string(getenv("HOME")) + "/.config/Minase/config.ini");
     config.LoadBookmarks(std::string(getenv("HOME")) + "/.config/Minase/bookmarks");
+    config.LoadPlugins(std::string(getenv("HOME")) + "/.config/Minase/plugin.ini");
   }
 
 #ifdef USE_MIGEMO

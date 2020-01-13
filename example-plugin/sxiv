@@ -1,0 +1,5 @@
+#!/usr/bin/sh
+# $1 Current file path
+# $2 File containing selected files path
+
+sxiv "$1"

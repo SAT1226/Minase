@@ -75,6 +75,7 @@ optional:
 |b| Open Bookmarks|
 |/| Filter|
 |^/| Change Filter type|
+|x| Run Plugin |
 
 Quit and cd:
 ```
@@ -131,6 +132,13 @@ FilterType = 0
 ~/Download
 ~/Documents
 /usr/local
+```
+
+~/.config/Minase/plugin.ini    
+```
+# 0:CUI/1:GUI FileName
+1 ~/.config/Minase/plugins/sxiv
+0 ~/.config/Minase/plugins/renamer
 ```
 
 ## License
