@@ -1265,6 +1265,10 @@ private:
   std::vector<std::string> getPreviewAudioTag(const FileInfo& fileInfo) {
     std::vector<std::string> result;
     TagLib::FileRef f(fileInfo.getFilePath().c_str());
+    if(f.audioProperties() == nullptr) {
+      result.emplace_back("No audio properties");
+      return result;
+    }
 
     int sec = f.audioProperties() -> length();
     int min = sec / 60;
