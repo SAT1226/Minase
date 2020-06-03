@@ -2735,6 +2735,7 @@ private:
 
     case TB_KEY_CTRL_L:
       refresh();
+      fileViews_[currentFileView_] -> reload();
       preViewDraw = false;
       break;
 
