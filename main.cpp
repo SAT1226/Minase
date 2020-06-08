@@ -124,6 +124,7 @@ static int utf8pcre_int2char(unsigned int in, unsigned char* out)
     return 6;
   }
 }
+/*-end-*/
 #endif
 
 const static int TAB_MAX = 4;
@@ -186,6 +187,13 @@ public:
   struct Plugin {
     bool gui;
     std::string fileName;
+
+    enum Operation {
+      NONE,
+      CHANGE_DIRECTORY,
+      SELECT_FILES,
+    };
+    Operation operation;
   };
 
   bool LoadPlugins(const std::string& fileName) {
@@ -199,33 +207,40 @@ public:
       if(fgets(buf, sizeof(buf), fp) != 0) {
         std::string txt(buf);
 
+        if(txt[0] == '#') continue;
         if(txt.back() == '\n') txt.pop_back();
         if(txt.back() == '\r') txt.pop_back();
 
-        try {
-          if(txt[0] == '#') continue;
+        Plugin p;
+        std::string field;
+        std::istringstream stream(txt);
 
-          size_t pos = txt.find_first_not_of(" ");
-          txt = txt.substr(pos);
+        if(!std::getline(stream, field, ' ')) continue;
+        if(field.empty()) continue;
 
-          if(txt[0] == '0' || txt[0] == '1') {
-            Plugin p;
+        if(field[0] == '0') p.gui = false;
+        else if(field[0] == '1') p.gui = true;
+        else continue;
 
-            if(txt[0] == '0') p.gui = false;
-            if(txt[0] == '1') p.gui = true;
+        if(!std::getline(stream, field, ' ')) continue;
+        if(field.empty()) continue;
 
-            txt = txt.substr(1);
-            size_t pos = txt.find_first_not_of(" ");
-            txt = txt.substr(pos);
-            p.fileName = txt;
-
-            plugins_.emplace_back(p);
-          }
-          else continue;
+        if(field[0] == '0') p.operation = Plugin::Operation::NONE;
+        else if(field[0] == '1') {
+          p.operation = Plugin::Operation::CHANGE_DIRECTORY;
+          p.gui = false;
         }
-        catch(std::exception& e) {
-          continue;
+        else if(field[0] == '2') {
+          p.operation = Plugin::Operation::SELECT_FILES;
+          p.gui = false;
         }
+        else continue;
+
+        if(!std::getline(stream, field)) continue;
+        if(field.empty()) continue;
+
+        p.fileName = field;
+        plugins_.emplace_back(p);
       }
     }
 
@@ -282,6 +297,8 @@ int spawn(const std::string& cmd, const std::string& args1,
     if(pid < 0) return -1;
     else if(pid == 0) {
       if(chDir) chdir(dir.c_str());
+      signal(SIGINT, SIG_DFL);
+      signal(SIGQUIT, SIG_DFL);
 
       execlp(cmd.c_str(), cmd.c_str(),
              args1.empty() ? NULL : args1.c_str(),
@@ -292,6 +309,7 @@ int spawn(const std::string& cmd, const std::string& args1,
 
     int stat = 0;
     waitpid(pid, &stat, 0);
+    if(WIFSIGNALED(stat)) printf("\n");
 
     tb_init();
   }
@@ -305,8 +323,11 @@ int spawn(const std::string& cmd, const std::string& args1,
       if(pid2 < 0) _exit(1);
       else if(pid2 == 0) {
         if(chDir) chdir(dir.c_str());
-        int fd = open("/dev/null", O_WRONLY, 0200);
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        setsid();
 
+        int fd = open("/dev/null", O_WRONLY, 0200);
         dup2(fd, STDOUT_FILENO);
         dup2(fd, STDERR_FILENO);
         close(fd);
@@ -2928,9 +2949,7 @@ private:
 
     case  'x':
       execPlugin();
-      resize();
       preViewDraw = false;
-      fileViews_[currentFileView_] -> reload();
       break;
     };
 
@@ -2946,13 +2965,7 @@ private:
 
     int n = menuMode("Plugins", pluginNames);
     if(n != -1 && plugins.size() > 0) {
-      std::string plugin = plugins[n].fileName;
-
-      if(plugin.length() >= 2 && plugin[0] == '~' && plugin[1] == '/') {
-        auto home = getenv("HOME");
-        if(home == 0) plugin[0] = '/';
-        else plugin = home + std::string(plugin.begin() + 1, plugin.end());
-      }
+      std::string plugin = tilde2home(plugins[n].fileName);
 
       FILE* fp;
       if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
@@ -2971,37 +2984,69 @@ private:
         spawn(plugin, fileViews_[currentFileView_] -> getPath(),
               tmpFileName_.c_str(), fileViews_[currentFileView_] -> getPath(), plugins[n].gui);
       }
-      resize();
+
+      if(plugins[n].operation == Config::Plugin::Operation::CHANGE_DIRECTORY) {
+        FILE* fp;
+        char buf[4096];
+
+        if((fp = fopen(tmpFileName_.c_str(), "r")) == NULL) return;
+
+        if(fgets(buf, sizeof(buf), fp) != 0) {
+          if(buf[0] != '\0') gotoDirectory(buf);
+        }
+
+        fclose(fp);
+        resize();
+      }
+      else {
+        resize();
+        fileViews_[currentFileView_] -> reload();
+      }
+    }
+  }
+
+  std::string tilde2home(const std::string& path) {
+    if(path.length() >= 2 && path[0] == '~' && path[1] == '/') {
+      auto home = getenv("HOME");
+      if(home == 0)
+        return std::string(path.begin() + 1, path.end());
+      else
+        return home + std::string(path.begin() + 1, path.end());
+    }
+    else return path;
+  }
+
+  bool gotoDirectory(const std::string path) {
+    if(path.empty()) return false;
+
+    auto orgPath = tilde2home(path);
+
+    auto p = orgPath.c_str();
+    if((p[0] == '.' && p[1] == '.') || (p[0] != '/') ||
+       ((p[0] == '.' && p[1] == '\0') || (p[0] == '.' && p[1] == '/'))) {
+      orgPath = fileViews_[currentFileView_] -> getPath() + orgPath;
+    }
+
+    auto rpath = realpath(orgPath.c_str(), NULL);
+    if(rpath != NULL) {
+      if(std::string(rpath) != "/")
+        fileViews_[currentFileView_] -> setPath(std::string(rpath) + "/");
+      else
+        fileViews_[currentFileView_] -> setPath("/");
+
+      free(rpath);
+      return true;
+    }
+    else {
+      printInfoMessage(strerror(errno));
+      return false;
     }
   }
 
   void openBookmarks() {
     auto bookmarks = config.getBookmarks();
     int n = menuMode("BookMark", bookmarks);
-    if(n != -1 && bookmarks.size() > 0) {
-      std::string bookmark = bookmarks[n];
-
-      if(bookmark.length() >= 2 && bookmark[0] == '~' && bookmark[1] == '/') {
-        auto home = getenv("HOME");
-        if(home == 0)
-          bookmark[0] = '/';
-        else
-          bookmark = home + std::string(bookmark.begin() + 1, bookmark.end());
-      }
-
-      auto path = realpath(bookmark.c_str(), NULL);
-      if(path != NULL) {
-        if(std::string(path) != "/")
-          fileViews_[currentFileView_] -> setPath(std::string(path) + "/");
-        else
-          fileViews_[currentFileView_] -> setPath("/");
-
-        free(path);
-      }
-      else {
-        printInfoMessage(strerror(errno));
-      }
-    }
+    if(n != -1 && bookmarks.size() > 0) gotoDirectory(bookmarks[n]);
   }
 
   void invertSelection() {
@@ -3517,7 +3562,6 @@ int main(int argc, char **argv)
     config.LoadBookmarks(std::string(getenv("HOME")) + "/.config/Minase/bookmarks");
     config.LoadPlugins(std::string(getenv("HOME")) + "/.config/Minase/plugin.ini");
   }
-
 #ifdef USE_MIGEMO
   mgm = migemo_open(config.getMigemoDict().c_str());
   if(mgm == MIGEMO_DICTID_INVALID) {
@@ -3527,6 +3571,9 @@ int main(int argc, char **argv)
 
   migemo_setproc_int2char(mgm, (MIGEMO_PROC_INT2CHAR)(utf8pcre_int2char));
 #endif
+
+  signal(SIGINT, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
 
   int init = tb_init();
   if(init) {

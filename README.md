@@ -136,9 +136,10 @@ FilterType = 0
 
 ~/.config/Minase/plugin.ini    
 ```
-# 0:CUI/1:GUI FileName
-1 ~/.config/Minase/plugins/sxiv
-0 ~/.config/Minase/plugins/renamer
+# 0:CUI/1:GUI 0:NONE/1:ChDir FileName
+1 0 ~/.config/Minase/plugins/sxiv
+0 0 ~/.config/Minase/plugins/renamer
+0 1 ~/.config/Minase/plugins/autojump
 ```
 
 ## License
