@@ -11,6 +11,7 @@ namespace ImageUtil {
                  IMG_BMP,
                  IMG_GIF,
                  IMG_TGA,
+                 IMG_PSD,
                  IMG_UNKNOWN,
   };
 
@@ -40,6 +41,10 @@ namespace ImageUtil {
       for(int i = 3; i < 15; ++i)
         if(header[i] < 0x08 && header[i] != 0x00) return IMG_TYPE::IMG_GIF;
     }
+
+    if(header[0] == 0x38 && header[1] == 0x42 && header[2] == 0x50 &&
+       header[3] == 0x53 && header[4] == 0x00 && header[5] == 0x01)
+      return IMG_TYPE::IMG_PSD;
 
     // IMG_TGA
     union {
@@ -171,6 +176,19 @@ namespace ImageUtil {
       width = ci.i;
       ci.c[0] = buf[2], ci.c[1] = buf[3];
       height = ci.i;
+      break;
+
+    case IMG_TYPE::IMG_PSD:
+      fseek(fp, 14, SEEK_SET);
+      fread(buf, 1, 8, fp);
+
+      ci.c[3] = buf[0], ci.c[2] = buf[1];
+      ci.c[1] = buf[2], ci.c[0] = buf[3];
+      height = ci.i;
+
+      ci.c[3] = buf[4], ci.c[2] = buf[5];
+      ci.c[1] = buf[6], ci.c[0] = buf[7];
+      width = ci.i;
       break;
 
     case IMG_TYPE::IMG_UNKNOWN:
