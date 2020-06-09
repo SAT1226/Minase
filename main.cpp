@@ -3571,7 +3571,9 @@ private:
     while (std::getline(stream, path, ':')) {
       auto dir = DirInfo(path);
       for(int i = 0; i < dir.getCount(); ++i) {
-        cmdCache_.emplace_back(dir.at(i).getFileName());
+        auto fileInfo = dir.at(i);
+        if(!fileInfo.isDir())
+          cmdCache_.emplace_back(fileInfo.getFileName());
       }
     }
   }
