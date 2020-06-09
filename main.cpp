@@ -2089,6 +2089,21 @@ public:
     return result != -1;
   }
 
+  bool chmodFile(const std::string& fileName, mode_t mode) {
+    int result = chmod(fileName.c_str(), mode);
+
+    char strMode[80];
+    strmode(mode, strMode);
+    startTask();
+
+    if(result == 0)
+      addLogMessage("chmod[ " + std::string(strMode) + "]: " + fileName);
+    else
+      addLogMessage("Can't chmod[ " + std::string(strMode) + "]: " + fileName);
+
+    return result == 0;
+  }
+
   bool createFile(const std::string& path, const std::string& name, bool file) {
     auto fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
     if(fd == -1) return false;
@@ -2900,6 +2915,10 @@ private:
       sortFiles();
       break;
 
+    case '*':
+      toggleExecutePermission();
+      break;
+
     case 'r':
       renameFile();
       break;
@@ -3077,6 +3096,24 @@ private:
               "", "", true);
       }
     }
+  }
+
+  bool toggleExecutePermission() {
+    if(fileViews_[currentFileView_] -> isFileListEmpty()) return false;
+
+    auto fileInfo = fileViews_[currentFileView_] -> getCurrentFileInfo();
+    auto mode = fileInfo.getMode();
+
+    if(mode & S_IXUSR)
+      mode &= ~(S_IXUSR | S_IXGRP | S_IXOTH);
+    else
+      mode |= (S_IXUSR | S_IXGRP | S_IXOTH);
+
+    if(fileOperation_.chmodFile(fileViews_[currentFileView_] -> getCurrentFilePath(), mode))
+      fileViews_[currentFileView_] -> update();
+    else printInfoMessage(strerror(errno));
+
+    return true;
   }
 
   bool renameFile() {
