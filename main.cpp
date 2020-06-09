@@ -955,7 +955,8 @@ public:
     }
     // .rar
     if(header[0] == 0x52 && header[1] == 0x61 && header[2] == 0x72 &&
-       header[3] == 0x21 && header[4] == 0x1A && header[5] == 0x07 && header[6] == 0x00) {
+       header[3] == 0x21 && header[4] == 0x1A && header[5] == 0x07 &&
+       (header[6] == 0x00 || (header[6] == 0x01 && header[7] == 0x00))) {
       return true;
     }
     // .cab
