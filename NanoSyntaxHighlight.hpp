@@ -24,7 +24,13 @@ public:
     std::fill(fcolorBuf_.begin(), fcolorBuf_.end(), 0);
     std::fill(bcolorBuf_.begin(), bcolorBuf_.end(), 0);
 
-    int n = getHighlightType(fileName);
+    int n;
+    auto end = txt.find_first_of('\n');
+    if(end == std::string::npos)
+      n = getHighlightType(fileName, txt);
+    else
+      n = getHighlightType(fileName, txt.substr(0, end));
+
     if(n == -1) return txt;
 
     const std::vector<HighlightRule>& hlRuleList = hightlightList_[n].highlightRuleList;
@@ -161,6 +167,9 @@ public:
         else if(splitTxt[0] == "magic") {
           hightlight.magicRegex = splitTxt[1];
         }
+        else if(splitTxt[0] == "header") {
+          hightlight.headerRegex = splitTxt[1];
+        }
         else if(splitTxt[0] == "comment") {
           hightlight.commentRegex = splitTxt[1];
         }
@@ -200,7 +209,7 @@ private:
     return strncmp(str.c_str(), start.c_str(), start.length()) == 0;
   }
 
-  int getHighlightType(const std::string& fileName) {
+  int getHighlightType(const std::string& fileName, const std::string& header) {
 
     int n = -1;
     currentSyntaxName_ = "";
@@ -219,6 +228,26 @@ private:
           break;
         }
         regfree(&re);
+      }
+    }
+
+    if(n == -1) {
+      for(size_t i = 0; i < hightlightList_.size(); ++i) {
+        if(!hightlightList_[i].headerRegex.empty()) {
+          regex_t re;
+          regmatch_t m[1];
+
+          auto rstr = getSurroundDoubleQuotation(hightlightList_[i].headerRegex);
+          regcomp(&re, rstr.c_str(),
+                  REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+
+          if(regexec(&re, header.c_str(), 0, m, 0) != REG_NOMATCH) {
+            n = i;
+            regfree(&re);
+            break;
+          }
+          regfree(&re);
+        }
       }
     }
 
@@ -428,6 +457,7 @@ private:
 
     std::string magicRegex;
     std::string commentRegex;
+    std::string headerRegex;
 
     std::vector<HighlightRule> highlightRuleList;
   };
