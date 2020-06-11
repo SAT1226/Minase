@@ -1426,8 +1426,14 @@ private:
       if(fgets(rbuf, sizeof(rbuf), fp) != 0) {
         txt += rbuf;
 
+        if(kill_) {
+          fclose(fp);
+          return ret;
+        }
+
         // Remove CRLF
         if(txt.back() == '\n') txt.pop_back();
+        else if(!feof(fp)) continue;
         if(txt.back() == '\r') txt.pop_back();
 
         txt.push_back('\n');

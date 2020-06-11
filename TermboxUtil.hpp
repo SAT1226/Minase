@@ -38,7 +38,7 @@ std::string strimwidth(const std::string& str, int l, int* strlen = 0)
   for(i = 0; i < static_cast<int>(wstr.length()); ++i) {
     // escape sequence
     if(wstr[i] == L'\e') {
-      if(wstr[i + 1] == L'[') {
+      if(static_cast<int>(wstr.length()) > i + 1 && wstr[i + 1] == L'[') {
         int j = 1;
         while(wstr[i + j] != L'm') {
           if(j < static_cast<int>(wstr.length())) ++j;
@@ -48,10 +48,10 @@ std::string strimwidth(const std::string& str, int l, int* strlen = 0)
         continue;
       }
     }
-    if(wstr[i] == L'\r') wstr[i] = L' ';
-    if(wstr[i] == L'\n') wstr[i] = L' ';
+    if(iswcntrl(wstr[i])) wstr[i] = L' ';
 
     auto wc = tb_wcwidth(wstr[i]);
+    if(wc < 0) break;
     w += wc;
 
     if(w > l) {
