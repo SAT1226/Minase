@@ -76,6 +76,8 @@ optional:
 |/| Filter|
 |^/| Change Filter type|
 |x| Run Plugin |
+|*| Toggle execute permission|
+|Alt + key| Run Plugin |
 
 Quit and cd:
 ```
@@ -136,10 +138,20 @@ FilterType = 0
 
 ~/.config/Minase/plugin.ini    
 ```
-# 0:CUI/1:GUI 0:NONE/1:ChDir FileName
-1 0 ~/.config/Minase/plugins/sxiv
-0 0 ~/.config/Minase/plugins/renamer
-0 1 ~/.config/Minase/plugins/autojump
+[sxiv]
+; Plugin Path
+filepath = ~/.config/Minase/plugins/sxiv
+; GUI: true / false
+gui = true
+; 0: NONE / 1: ChDir
+operation = 0
+; Shortcut Key
+key = s
+
+[autojump]
+filepath = ~/.config/Minase/plugins/autojump
+operation = 1
+key = j
 ```
 
 ## License
