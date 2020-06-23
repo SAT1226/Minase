@@ -1021,7 +1021,7 @@ class PreView {
 public:
   PreView(const FileInfo& fileInfo) :
     kill_(false), done_(true), pid_(0), disable_(false), drawLoading_(false),
-    imagePreview_(true), x_(0), y_(0), width_(0), height_(0),
+    imagePreview_(true), x_(0), y_(0), width_(0), height_(0), scroll_(0),
     fileInfo_(fileInfo) {
 
     highlight_.loadPathNanoRC(config.getNanorcPath());
@@ -1068,8 +1068,28 @@ public:
     kill_ = done_ = false;
     loadStartClock_ = std::chrono::system_clock::now();
     drawLoading_ = false;
+    scroll_ = 0;
 
     implData_.clear();
+  }
+
+  bool scrollDown() {
+    if(done_ && !implData_.getSixelNL()) {
+      if(static_cast<int>(implData_.getTextRefNL().size()) >
+         scroll_ + tb_height()){
+        ++scroll_;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool scrollUp() {
+    if(done_) {
+      if(--scroll_ < 0) scroll_ = 0;
+      else return true;
+    }
+    return false;
   }
 
   void reload() {
@@ -1142,9 +1162,9 @@ public:
             printf("\e[7;1m%s\e[27;22m\e[K", "empty");
             continue;
           }
-          if(size > static_cast<size_t>(i - y_)) {
+          if(size > static_cast<size_t>(scroll_ + i - y_)) {
             printf("%s\e[m\e[K",
-                   strimwidth(tab2Space(implData_.getTextRefNL()[i - y_]), width_).c_str());
+                   strimwidth(tab2Space(implData_.getTextRefNL()[scroll_ + i - y_]), width_).c_str());
           }
           else {
             printf("\e[K");
@@ -1307,8 +1327,13 @@ private:
     std::vector<std::string> result;
 
     DirInfo dir(fileInfo.getFilePath(), &kill_);
-    int maxCount = dir.getCount() > config.getPreViewMaxLines() ?
-      config.getPreViewMaxLines() : dir.getCount();
+    int maxCount;
+
+    if(config.getPreViewMaxLines() != -1)
+      maxCount = dir.getCount() > config.getPreViewMaxLines() ?
+        config.getPreViewMaxLines() : dir.getCount();
+    else
+      maxCount = dir.getCount();
 
     for(int i = 0; i < maxCount; ++i) {
       auto f = dir.at(i);
@@ -1429,7 +1454,9 @@ private:
         txt.push_back('\n');
       }
 
-      if(++cnt > config.getPreViewMaxLines()) break;
+      if(config.getPreViewMaxLines() == -1) ++cnt;
+      else if(++cnt > config.getPreViewMaxLines()) break;
+
       if(kill_) {
         fclose(fp);
         return ret;
@@ -1450,7 +1477,8 @@ private:
 
         memcpy(src, txt.c_str(), txt.length() + 1);
 
-        auto iv = iconv_open(nl_langinfo(CODESET), charset.c_str());
+        std::string toCharset = std::string(nl_langinfo(CODESET)) + "//IGNORE";
+        auto iv = iconv_open(toCharset.c_str(), charset.c_str());
         iconv(iv, &psrc, &srclen, &pdst, &dstlen);
         txt = dst;
 
@@ -1461,7 +1489,7 @@ private:
     }
     if(kill_) return ret;
 
-    txt = highlight_.highlight(fileInfo.getFileName(), txt);
+    txt = highlight_.highlight(fileInfo.getFileName(), txt, std::ref(kill_));
     auto syntaxName = highlight_.getCurrentSyntaxName();
     if(syntaxName.empty()) syntaxName = "PlainText";
 
@@ -1601,7 +1629,7 @@ private:
   std::thread thread_;
 
   bool disable_, drawLoading_, imagePreview_;
-  int x_, y_, width_, height_;
+  int x_, y_, width_, height_, scroll_;
   std::chrono::system_clock::time_point loadStartClock_;
 
   FileInfo fileInfo_;
@@ -2770,6 +2798,14 @@ private:
     case TB_KEY_PGUP:
     case TB_KEY_CTRL_U:
       fileViews_[currentFileView_] -> cursorPgUp();
+      break;
+
+    case TB_KEY_CTRL_J:
+      if(preView_.scrollDown()) preViewDraw = false;
+      break;
+
+    case TB_KEY_CTRL_K:
+      if(preView_.scrollUp()) preViewDraw = false;
       break;
 
     case TB_KEY_CTRL_R:

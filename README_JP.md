@@ -77,7 +77,8 @@ optional:
 |*| 実行属性をトグルする|
 |x| pluginを実行|
 |Alt + key| pluginを実行|
-
+|^j| プレビュー画面を下にスクロール|
+|^k| プレビュー画面を上にスクロール|
 終了時にcdするには:
 ```
  $ minase; if [ -f ~/.config/Minase/lastdir ]; then cd "`cat ~/.config/Minase/lastdir`"; rm ~/.config/Minase/lastdir; fi;
@@ -99,7 +100,7 @@ Opener = xdg-open
 ; Log view Max lines
 LogMaxLines = 100
 
-; Preview Max lines
+; Preview Max lines (-1: 無制限)
 PreViewMaxLines = 50
 
 ; Use trash-cli

@@ -78,6 +78,8 @@ optional:
 |x| Run Plugin |
 |*| Toggle execute permission|
 |Alt + key| Run Plugin |
+|^j| scrolldown in preview|
+|^k| scrollup in preview|
 
 Quit and cd:
 ```
@@ -101,7 +103,7 @@ Opener = xdg-open
 ; Log view Max lines
 LogMaxLines = 100
 
-; Preview Max lines
+; Preview Max lines (-1: unlimited)
 PreViewMaxLines = 50
 
 ; Use trash-cli

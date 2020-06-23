@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <atomic>
+#include <thread>
 
 #include <regex.h>
 #include <dirent.h>
@@ -17,12 +19,14 @@ class NanoSyntaxHighlight {
 public:
   NanoSyntaxHighlight() :tabsize_(-1), lineNumbers_(false) {}
 
-  std::string highlight(const std::string& fileName, const std::string& txt) {
+  std::string highlight(const std::string& fileName,
+                        const std::string& txt, std::atomic<bool>& kill) {
 
     fcolorBuf_.resize(txt.length());
     bcolorBuf_.resize(txt.length());
     std::fill(fcolorBuf_.begin(), fcolorBuf_.end(), 0);
     std::fill(bcolorBuf_.begin(), bcolorBuf_.end(), 0);
+    if(kill) return txt;
 
     int n;
     auto end = txt.find_first_of('\n');
@@ -54,6 +58,7 @@ public:
         regexSurround(txt, rStr1, rStr2, fcolor, bcolor,
                       hlRuleList[i].icase, hlRuleList[i + 1].icase);
       }
+      if(kill) return txt;
     }
 
     std::string result;
@@ -89,12 +94,14 @@ public:
         else result.append(colorStr + txt[i]);
       }
       else result.append(colorStr + txt[i]);
+      if(kill) break;
     }
 
     return result;
   }
 
-  std::string highlight(const std::string& fileName, FILE* fp) {
+  std::string highlight(const std::string& fileName,
+                        FILE* fp, std::atomic<bool>& kill) {
     std::string txt;
     char rbuf[1024];
     while(!feof(fp)) {
@@ -110,7 +117,7 @@ public:
       }
     }
 
-    return highlight(fileName, txt);
+    return highlight(fileName, txt, std::ref(kill));
   }
 
   void setTabSpace(int tabsize) { tabsize_ = tabsize; }
