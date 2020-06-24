@@ -2915,6 +2915,7 @@ private:
           spawn(shell, "", "",
                 fileViews_[currentFileView_] -> getPath());
           resize();
+          fileViews_[currentFileView_] -> reload();
           preViewDraw = false;
         }
       }
@@ -3364,6 +3365,7 @@ private:
               fileViews_[currentFileView_] -> getPath(), gui);
 
         resize();
+        fileViews_[currentFileView_] -> reload();
         return true;
       }
     }
