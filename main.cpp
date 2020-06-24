@@ -2436,6 +2436,15 @@ public:
             }
             break;
           }
+          break;
+
+        case TB_KEY_HOME:
+          ev.ch = 'g';
+          break;
+
+        case TB_KEY_END:
+          ev.ch = 'G';
+          break;
         };
 
         switch (ev.ch) {
@@ -2596,6 +2605,14 @@ public:
             line -= tb_height() / 2;
           }
           else line = 0;
+          break;
+
+        case TB_KEY_HOME:
+          ev.ch = 'g';
+          break;
+
+        case TB_KEY_END:
+          ev.ch = 'G';
           break;
         }
 
@@ -2798,6 +2815,14 @@ private:
     case TB_KEY_PGUP:
     case TB_KEY_CTRL_U:
       fileViews_[currentFileView_] -> cursorPgUp();
+      break;
+
+    case TB_KEY_HOME:
+      ch = 'g';
+      break;
+
+    case TB_KEY_END:
+      ch = 'G';
       break;
 
     case TB_KEY_CTRL_J:
