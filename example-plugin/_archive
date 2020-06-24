@@ -1,0 +1,25 @@
+#!/bin/sh
+# $1 Current file path
+# $2 File containing selected files path
+# $3 Input Text
+
+CURRENT=`pwd`
+TMPFILE=`mktemp`
+ARCHIVE=$3
+
+if [ -z "$ARCHIVE" ]; then
+  ARCHIVE=$(basename "`head -1 "$2"`")
+  ARCHIVE=${ARCHIVE%.*}.zip
+fi
+
+while read line
+do
+  realpath --relative-to="${CURRENT}" "${line}" >> "${TMPFILE}"
+done < $2
+
+if [ -s $TMPFILE ]; then
+  cat $TMPFILE | tr '\n' '\0' | atool -a --null "$ARCHIVE" 2> /dev/null
+  echo -n "$ARCHIVE" > "$2"
+fi
+
+rm $TMPFILE

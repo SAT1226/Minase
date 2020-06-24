@@ -40,6 +40,29 @@
 #include "ImageUtil.hpp"
 #include "TermboxUtil.hpp"
 
+const static int TAB_MAX = 4;
+static const char* const TMP_FILENAME = "/tmp/minase_tmp";
+
+std::string getBaseName(const std::string& name)
+{
+  auto pos = name.find_last_of('/');
+
+  if(pos != std::string::npos)
+    return name.substr(name.find_last_of('/') + 1);
+
+  return "";
+}
+
+std::string getDirName(const std::string& name)
+{
+  auto pos = name.find_last_of('/');
+
+  if(pos != std::string::npos)
+    return name.substr(0, name.find_last_of('/'));
+
+  return "";
+}
+
 #ifdef USE_MIGEMO
 #include <migemo.h>
 migemo* mgm;
@@ -127,9 +150,6 @@ static int utf8pcre_int2char(unsigned int in, unsigned char* out)
 /*-end-*/
 #endif
 
-const static int TAB_MAX = 4;
-static const char* const TMP_FILENAME = "/tmp/minase_tmp";
-
 class Config {
 public:
   Config() : logMaxlines_(100), preViewMaxlines_(50), fileViewType_(0),
@@ -189,11 +209,12 @@ public:
     std::string name;
     std::string filePath;
     std::string key;
+    bool inputText;
 
     enum Operation {
       NONE,
       CHANGE_DIRECTORY,
-      SELECT_FILES,
+      CHANGE_CURRENT_FILE,
     };
     Operation operation;
   };
@@ -226,12 +247,20 @@ public:
         break;
 
       case 2:
-        p.operation = Plugin::Operation::SELECT_FILES;
+        p.operation = Plugin::Operation::CHANGE_CURRENT_FILE;
         break;
 
       default:
         p.operation = Plugin::Operation::NONE;
       };
+
+      p.inputText = false;
+      if(!p.filePath.empty()) {
+        auto basename = getBaseName(p.filePath);
+        if(!basename.empty()) {
+          if(basename[0] == '_') p.inputText = true;
+        }
+      }
 
       plugins_.emplace_back(p);
     }
@@ -275,7 +304,8 @@ private:
 Config config;
 
 int spawn(const std::string& cmd, const std::string& args1,
-          const std::string& args2, const std::string& dir, bool gui = false)
+          const std::string& args2, const std::string& args3,
+          const std::string& dir, bool gui = false)
 {
   bool chDir = dir.empty() ? false : true;
   pid_t pid;
@@ -292,7 +322,9 @@ int spawn(const std::string& cmd, const std::string& args1,
 
       execlp(cmd.c_str(), cmd.c_str(),
              args1.empty() ? NULL : args1.c_str(),
-             args2.empty() ? NULL : args2.c_str(), NULL);
+             args2.empty() ? NULL : args2.c_str(),
+             args3.empty() ? NULL : args3.c_str(),
+             NULL);
 
       _exit(1);
     }
@@ -324,7 +356,9 @@ int spawn(const std::string& cmd, const std::string& args1,
 
         execlp(cmd.c_str(), cmd.c_str(),
                args1.empty() ? NULL : args1.c_str(),
-               args2.empty() ? NULL : args2.c_str(), NULL);
+               args2.empty() ? NULL : args2.c_str(),
+               args3.empty() ? NULL : args3.c_str(),
+               NULL);
 
         _exit(1);
       }
@@ -679,7 +713,7 @@ private:
   public:
     Filter() {}
     virtual ~Filter() {}
-    virtual bool isMatch(const std::string& fileName) { return true; };
+    virtual bool isMatch(const std::string& fileName) { (void)fileName; return true; };
   };
 
   class NormalFilter : public Filter {
@@ -2834,7 +2868,7 @@ private:
       break;
 
     case TB_KEY_CTRL_R:
-      spawn("vidir", "", "", fileViews_[currentFileView_] -> getPath());
+      spawn("vidir", "", "", "", fileViews_[currentFileView_] -> getPath());
       fileViews_[currentFileView_] -> reload();
       resize();
       preViewDraw = false;
@@ -2912,7 +2946,7 @@ private:
 
         if(shell == 0) printInfoMessage("SHELL environment variable not set.");
         else {
-          spawn(shell, "", "",
+          spawn(shell, "", "", "",
                 fileViews_[currentFileView_] -> getPath());
           resize();
           fileViews_[currentFileView_] -> reload();
@@ -3059,13 +3093,24 @@ private:
     }
     fclose(fp);
 
+    std::string text;
+    if(plugin.inputText) {
+      if(!plugin.filePath.empty()) {
+        std::vector<std::string> currentDirFiles;
+        for(int i = 0; i < fileViews_[currentFileView_] -> getFileListCount(); ++i)
+          currentDirFiles.emplace_back(fileViews_[currentFileView_] -> getFileInfo(i).getFileName());
+
+        if(getReadline(plugin.name + ": ", text, 0, &currentDirFiles)) return;
+      }
+    }
+
     if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
       spawn(filepath, fileViews_[currentFileView_] -> getCurrentFileName(),
-            tmpFileName_.c_str(), fileViews_[currentFileView_] -> getPath(), plugin.gui);
+            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(), plugin.gui);
     }
     else {
       spawn(filepath, fileViews_[currentFileView_] -> getPath(),
-            tmpFileName_.c_str(), fileViews_[currentFileView_] -> getPath(), plugin.gui);
+            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(), plugin.gui);
     }
 
     if(plugin.operation == Config::Plugin::Operation::CHANGE_DIRECTORY) {
@@ -3080,6 +3125,40 @@ private:
 
       fclose(fp);
       resize();
+    }
+    else if(plugin.operation == Config::Plugin::Operation::CHANGE_CURRENT_FILE) {
+      FILE* fp;
+      char buf[4096];
+
+      if((fp = fopen(tmpFileName_.c_str(), "r")) == NULL) return;
+
+      if(fgets(buf, sizeof(buf), fp) != 0) {
+        if(buf[0] != '\0') {
+          if(getDirName(buf) == "") {
+            fileViews_[currentFileView_] -> update();
+
+            int pos = fileViews_[currentFileView_] -> searchFileName(buf);
+            if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+            else fileViews_[currentFileView_] -> setCursorPos(0);
+          }
+          else {
+            if(gotoDirectory(getDirName(buf))) {
+              int pos = fileViews_[currentFileView_] -> searchFileName(getBaseName(buf));
+              if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+              else {
+                pos = fileViews_[currentFileView_] -> searchFileName(getBaseName(buf) + "/");
+
+                if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+                else fileViews_[currentFileView_] -> setCursorPos(0);
+              }
+            }
+          }
+        }
+      }
+      else fileViews_[currentFileView_] -> reload();
+
+      resize();
+      fclose(fp);
     }
     else {
       resize();
@@ -3170,7 +3249,7 @@ private:
       else {
         spawn(config.getOpener(),
               fileViews_[currentFileView_] -> getCurrentFilePath().c_str(),
-              "", "", true);
+              "", "", "", true);
       }
     }
   }
@@ -3361,7 +3440,7 @@ private:
         auto c = getInput("cli mode? (y/N)");
         bool gui = true;
         if(c == 'y' || c == 'Y') gui = false;
-        spawn(cmd, fileViews_[currentFileView_] -> getCurrentFileName(), "",
+        spawn(cmd, fileViews_[currentFileView_] -> getCurrentFileName(), "", "",
               fileViews_[currentFileView_] -> getPath(), gui);
 
         resize();
@@ -3383,7 +3462,7 @@ private:
 
       spawn(editor,
             fileViews_[currentFileView_] -> getCurrentFilePath().c_str(),
-            "", fileViews_[currentFileView_] -> getPath());
+            "", "", fileViews_[currentFileView_] -> getPath());
       resize();
 
       preView_.setLoadFile(fileViews_[currentFileView_] -> getCurrentFileInfo());
@@ -3487,6 +3566,7 @@ private:
                    const char* txt = 0, std::vector<std::string>* complist = 0,
                    std::list<std::string>* history = 0) const {
     printf("\e[%d;%dH\e[K", tb_height(), 0);
+    printf("\e[27;22m");
     printf("\e[?25h"); // show cursor
     fflush(stdout);
 
@@ -3517,6 +3597,7 @@ private:
 
   char getInput(const std::string& prompt) const {
     printf("\e[%d;%dH\e[K", tb_height(), 0);
+    printf("\e[27;22m");
     printf("%s", prompt.c_str());
     fflush(stdout);
 
