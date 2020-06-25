@@ -210,6 +210,7 @@ public:
     std::string filePath;
     std::string key;
     bool inputText;
+    bool shell;
 
     enum Operation {
       NONE,
@@ -236,29 +237,37 @@ public:
       p.gui = reader.GetBoolean(section, "gui", false);
       p.key = reader.Get(section, "key", "");
 
-      auto operation = reader.GetInteger(section, "operation", 0);
-      switch(operation) {
-      case 0:
-        p.operation = Plugin::Operation::NONE;
-        break;
-
-      case 1:
-        p.operation = Plugin::Operation::CHANGE_DIRECTORY;
-        break;
-
-      case 2:
-        p.operation = Plugin::Operation::CHANGE_CURRENT_FILE;
-        break;
-
-      default:
-        p.operation = Plugin::Operation::NONE;
-      };
-
       p.inputText = false;
       if(!p.filePath.empty()) {
         auto basename = getBaseName(p.filePath);
         if(!basename.empty()) {
-          if(basename[0] == '_') p.inputText = true;
+          char op = basename[0];
+
+          if(basename[0] == '_') {
+            p.inputText = true;
+
+            if(basename.length() > 2) op = basename[1];
+          }
+          p.shell = (basename.back() != '%');
+
+          switch(op) {
+          case '0':
+            p.operation = Plugin::Operation::NONE;
+            break;
+
+          case '1':
+            p.operation = Plugin::Operation::CHANGE_DIRECTORY;
+            p.gui = false;
+            break;
+
+          case '2':
+            p.operation = Plugin::Operation::CHANGE_CURRENT_FILE;
+            p.gui = false;
+            break;
+
+          default:
+            p.operation = Plugin::Operation::NONE;
+          };
         }
       }
 
@@ -305,13 +314,13 @@ Config config;
 
 int spawn(const std::string& cmd, const std::string& args1,
           const std::string& args2, const std::string& args3,
-          const std::string& dir, bool gui = false)
+          const std::string& dir, bool gui = false, bool shell = true)
 {
   bool chDir = dir.empty() ? false : true;
   pid_t pid;
 
   if(!gui) {
-    tb_shutdown();
+    if(shell) tb_shutdown();
     pid = fork();
 
     if(pid < 0) return -1;
@@ -333,7 +342,7 @@ int spawn(const std::string& cmd, const std::string& args1,
     waitpid(pid, &stat, 0);
     if(WIFSIGNALED(stat)) printf("\n");
 
-    tb_init();
+    if(shell) tb_init();
   }
   else {
     pid = fork();
@@ -3106,11 +3115,13 @@ private:
 
     if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
       spawn(filepath, fileViews_[currentFileView_] -> getCurrentFileName(),
-            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(), plugin.gui);
+            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(),
+            plugin.gui, plugin.shell);
     }
     else {
       spawn(filepath, fileViews_[currentFileView_] -> getPath(),
-            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(), plugin.gui);
+            tmpFileName_, text, fileViews_[currentFileView_] -> getPath(),
+            plugin.gui, plugin.shell);
     }
 
     if(plugin.operation == Config::Plugin::Operation::CHANGE_DIRECTORY) {

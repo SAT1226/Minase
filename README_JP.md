@@ -139,17 +139,14 @@ FilterType = 0
  ```
 [sxiv]
 ; Plugin Path
-filepath = ~/.config/Minase/plugins/sxiv
+filepath = ~/.config/Minase/plugins/0sxiv
 ; GUI: true / false
 gui = true
-; 0: NONE / 1: ChDir
-operation = 0
 ; Shortcut Key
 key = s
 
 [autojump]
-filepath = ~/.config/Minase/plugins/autojump
-operation = 1
+filepath = ~/.config/Minase/plugins/_1autojump%
 key = j
 ```
 

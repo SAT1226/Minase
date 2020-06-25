@@ -1,0 +1,9 @@
+#!/bin/sh
+# $1 Current file path
+# $2 File containing selected files path
+# $3 Input Text
+
+echo -n > "$2"
+
+JUMPDIR=`autojump "$3"`
+echo -n "$JUMPDIR" > "$2"

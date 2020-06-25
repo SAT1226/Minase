@@ -18,7 +18,7 @@ do
 done < $2
 
 if [ -s $TMPFILE ]; then
-  cat $TMPFILE | tr '\n' '\0' | atool -a --null "$ARCHIVE" 2> /dev/null
+  cat $TMPFILE | tr '\n' '\0' | atool -a --null "$ARCHIVE"
   echo -n "$ARCHIVE" > "$2"
 fi
 

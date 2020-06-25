@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+# $1 Current file path
+# $2 File containing selected files path
+
+if which unar > /dev/null 2>&1 ; then
+  cmd="unar"
+elif which aunpack > /dev/null 2>&1 ; then
+  cmd="aunpack"
+else
+  exit
+fi
+
+if [ ! -s "$2" ]; then
+  $cmd "$1"
+else
+  while read line
+  do
+    $cmd "$line"
+  done < $2
+fi
+
+echo "Please any key to exit!"
+read -n 1 -r _
