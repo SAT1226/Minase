@@ -35,6 +35,7 @@
 #include "./inih/INIReader.h"
 #include "./tsl/robin_set.h"
 #include "./cpp-linenoise/linenoise.hpp"
+#include "./cmdline/cmdline.h"
 
 #include "NanoSyntaxHighlight.hpp"
 #include "ImageUtil.hpp"
@@ -3816,6 +3817,22 @@ private:
 
 int main(int argc, char **argv)
 {
+  cmdline::parser parser;
+
+  parser.add("help", 0, "print this message");
+  parser.footer("path");
+  bool ok = parser.parse(argc, argv);
+
+  if(parser.exist("help")){
+    std::cerr << parser.usage();
+    return 0;
+  }
+
+  if(!ok){
+    std::cerr << parser.error() << std::endl << parser.usage();
+    return 1;
+  }
+
   setlocale(LC_ALL, "");
 
   if(getenv("HOME") != 0) {
@@ -3845,17 +3862,31 @@ int main(int argc, char **argv)
   tb_select_input_mode(TB_INPUT_ALT);
   atexit(tb_shutdown);
 
-  char* currentPath = get_current_dir_name();
-  Minase minase(std::string(currentPath) + "/");
-  free(currentPath);
+  std::string path;
 
+  if(parser.rest().size() > 0) {
+    path = parser.rest()[0];
+    if(path.at(path.size() - 1) != '/') {
+      path += "/";
+    }
+
+    struct stat lstat_;
+    lstat(path.c_str(), &lstat_);
+    if(!S_ISDIR(lstat_.st_mode)) path = "";
+  }
+
+  if(path == "") {
+    char* currentPath = get_current_dir_name();
+    path = std::string(currentPath) + "/";
+    free(currentPath);
+  }
+
+  Minase minase(path);
   minase.run();
 
 #ifdef USE_MIGEMO
   migemo_close(mgm);
 #endif
 
-  // Erase warning
-  (void)argc, (void)argv;
   return 0;
 }
