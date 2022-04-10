@@ -29,6 +29,7 @@
 #include <iconv.h>
 #include <uchardet/uchardet.h>
 #include <taglib/fileref.h>
+#include <taglib/tdebuglistener.h>
 
 #include "./termbox/termbox.h"
 #include "./libbsd/strmode.h"
@@ -43,6 +44,11 @@
 
 const static int TAB_MAX = 4;
 static const char* const TMP_FILENAME = "/tmp/minase_tmp";
+
+class NullListener : public TagLib::DebugListener {
+public:
+  virtual void printMessage(const TagLib::String &msg) {(void)msg;}
+};
 
 static std::string getBaseName(const std::string& name)
 {
@@ -3832,6 +3838,9 @@ int main(int argc, char **argv)
     std::cerr << parser.error() << std::endl << parser.usage();
     return 1;
   }
+
+  NullListener lisner;
+  TagLib::setDebugListener(&lisner);
 
   setlocale(LC_ALL, "");
 
