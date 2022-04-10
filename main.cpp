@@ -43,7 +43,7 @@
 const static int TAB_MAX = 4;
 static const char* const TMP_FILENAME = "/tmp/minase_tmp";
 
-std::string getBaseName(const std::string& name)
+static std::string getBaseName(const std::string& name)
 {
   auto pos = name.find_last_of('/');
 
@@ -53,7 +53,7 @@ std::string getBaseName(const std::string& name)
   return "";
 }
 
-std::string getDirName(const std::string& name)
+static std::string getDirName(const std::string& name)
 {
   auto pos = name.find_last_of('/');
 
@@ -210,7 +210,7 @@ public:
     std::string filePath;
     std::string key;
     bool inputText;
-    bool shell;
+    bool silent;
 
     enum Operation {
       NONE,
@@ -248,7 +248,7 @@ public:
 
             if(basename.length() > 2) op = basename[1];
           }
-          p.shell = (basename.back() != '%');
+          p.silent = (basename.back() != '%');
 
           switch(op) {
           case '0':
@@ -314,13 +314,13 @@ Config config;
 
 int spawn(const std::string& cmd, const std::string& args1,
           const std::string& args2, const std::string& args3,
-          const std::string& dir, bool gui = false, bool shell = true)
+          const std::string& dir, bool gui = false, bool silent = true)
 {
   bool chDir = dir.empty() ? false : true;
   pid_t pid;
 
   if(!gui) {
-    if(shell) tb_shutdown();
+    if(silent) tb_shutdown();
     pid = fork();
 
     if(pid < 0) return -1;
@@ -342,7 +342,7 @@ int spawn(const std::string& cmd, const std::string& args1,
     waitpid(pid, &stat, 0);
     if(WIFSIGNALED(stat)) printf("\n");
 
-    if(shell) tb_init();
+    if(silent) tb_init();
   }
   else {
     pid = fork();
@@ -754,13 +754,15 @@ private:
 
   class RegexpFilter : public Filter {
   public:
-    RegexpFilter(const std::string& filter) {
-      regcomp(&re_, filter.c_str(),
-              REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+    RegexpFilter(const std::string& filter) : reg_(false) {
+      if(regcomp(&re_, filter.c_str(),
+              REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE) == 0) reg_ = true;
     }
-    ~RegexpFilter() { regfree(&re_); }
+    ~RegexpFilter() { if(reg_) regfree(&re_); }
 
     bool isMatch(const std::string& fileName) {
+      if(!reg_) return true;
+
       if(!(regexec(&re_, fileName.c_str(), 0, m_, 0) != REG_NOMATCH))
         return false;
 
@@ -768,6 +770,7 @@ private:
     }
 
   private:
+    bool reg_;
     regex_t re_;
     regmatch_t m_[1];
   };
@@ -1119,7 +1122,7 @@ public:
   bool scrollDown() {
     if(done_ && !implData_.getSixelNL()) {
       if(static_cast<int>(implData_.getTextRefNL().size()) >
-         scroll_ + tb_height()){
+         scroll_ + tb_height() - 3){
         ++scroll_;
         return true;
       }
@@ -1916,6 +1919,9 @@ public:
 
         return true;
       }
+      else {
+        if(setPath(findUpDirName(newPath))) return true;
+      }
     }
 
     return false;
@@ -2054,6 +2060,22 @@ public:
   }
 
 private:
+  std::string findUpDirName(const std::string& path) {
+    auto dir = opendir(path.c_str());
+    if(dir == NULL) {
+      if(path == "/") return "/";
+
+      auto i = path.find_last_of('/', path.length() - 2);
+      if(i != std::string::npos) {
+        return findUpDirName(path.substr(0, i) + "/");
+      }
+      else return "/";
+    }
+    closedir(dir);
+
+    return path;
+  }
+
   DirInfo dir_;
   std::string path_, lastPath_;
   tsl::robin_set<std::string> selectedFiles_;
@@ -2400,7 +2422,9 @@ public:
     remove(tmpFileName_.c_str());
   }
 
-  int menuMode(const std::string& title, const std::vector<std::string>& menuItems) {
+  int menuMode(const std::string& title,
+               const std::vector<std::string>& menuItems,
+               char e = 0) {
     struct tb_event ev;
     int cursor = 0, scrollTop = 0;
     preView_.clear();
@@ -2488,6 +2512,10 @@ public:
         case TB_KEY_END:
           ev.ch = 'G';
           break;
+
+        case TB_KEY_CTRL_C:
+          return -1;
+
         };
 
         switch (ev.ch) {
@@ -2550,6 +2578,9 @@ public:
           }
 
           break;
+
+        default:
+          if(e != 0 && ev.ch == static_cast<uint32_t>(e)) return -1;
         }
         break;
 
@@ -3005,6 +3036,7 @@ private:
 
     case 'i':
       toggleImagePreview();
+      preViewDraw = false;
       break;
 
     case 'g':
@@ -3116,12 +3148,12 @@ private:
     if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
       spawn(filepath, fileViews_[currentFileView_] -> getCurrentFileName(),
             tmpFileName_, text, fileViews_[currentFileView_] -> getPath(),
-            plugin.gui, plugin.shell);
+            plugin.gui, plugin.silent);
     }
     else {
       spawn(filepath, fileViews_[currentFileView_] -> getPath(),
             tmpFileName_, text, fileViews_[currentFileView_] -> getPath(),
-            plugin.gui, plugin.shell);
+            plugin.gui, plugin.silent);
     }
 
     if(plugin.operation == Config::Plugin::Operation::CHANGE_DIRECTORY) {
@@ -3145,23 +3177,38 @@ private:
 
       if(fgets(buf, sizeof(buf), fp) != 0) {
         if(buf[0] != '\0') {
+          std::string fileName;
+
           if(getDirName(buf) == "") {
             fileViews_[currentFileView_] -> update();
-
-            int pos = fileViews_[currentFileView_] -> searchFileName(buf);
-            if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
-            else fileViews_[currentFileView_] -> setCursorPos(0);
+            fileName = buf;
           }
           else {
-            if(gotoDirectory(getDirName(buf))) {
-              int pos = fileViews_[currentFileView_] -> searchFileName(getBaseName(buf));
-              if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
-              else {
-                pos = fileViews_[currentFileView_] -> searchFileName(getBaseName(buf) + "/");
+            if(!gotoDirectory(getDirName(buf))) {
+              resize();
+              fclose(fp);
+              return;
+            }
+            else fileName = getBaseName(buf);
+          }
 
-                if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
-                else fileViews_[currentFileView_] -> setCursorPos(0);
-              }
+          bool hidden = false;
+          if(!fileName.empty() && fileName[0] == '.') {
+            if(!fileViews_[currentFileView_] -> isShowHiddenFiles()) {
+              hidden = true;
+              fileViews_[currentFileView_] -> showHiddenFiles(true);
+            }
+          }
+
+          int pos = fileViews_[currentFileView_] -> searchFileName(fileName);
+          if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+          else {
+            pos = fileViews_[currentFileView_] -> searchFileName(fileName + "/");
+
+            if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+            else {
+              fileViews_[currentFileView_] -> setCursorPos(0);
+              if(hidden) fileViews_[currentFileView_] -> showHiddenFiles(false);
             }
           }
         }
@@ -3187,7 +3234,7 @@ private:
       pluginNames.emplace_back(std::string("[") + k + "]" + " : " + plugin.name);
     }
 
-    int n = menuMode("Plugins", pluginNames);
+    int n = menuMode("Plugins", pluginNames, 'x');
     if(n != -1 && plugins.size() > 0)
       execPlugin(plugins[n]);
   }
@@ -3232,7 +3279,7 @@ private:
 
   void openBookmarks() {
     auto bookmarks = config.getBookmarks();
-    int n = menuMode("BookMark", bookmarks);
+    int n = menuMode("BookMark", bookmarks, 'b');
     if(n != -1 && bookmarks.size() > 0) gotoDirectory(bookmarks[n]);
   }
 
@@ -3496,6 +3543,10 @@ private:
 
   void toggleImagePreview() {
     preView_.setImagePreview(!preView_.isImagePreview());
+    preView_.reload();
+    refresh();
+    fileViews_[currentFileView_] -> reload();
+
     if(preView_.isImagePreview())
       printInfoMessage("Enable Image Preview.");
     else
