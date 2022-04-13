@@ -2415,14 +2415,22 @@ private:
 
 class Minase {
 public:
-  Minase(const std::string& initPath) :
+  enum PickerMode {
+    PICKER_NONE,
+    PICKER_FILE,
+    PICKER_FILES,
+    PICKER_DIR,
+  };
+
+  Minase(const std::string& initPath, Minase::PickerMode pickerMode, const std::string& filename) :
     fileViews_({std::unique_ptr<FileView>(new FileView(initPath)),
                 std::unique_ptr<FileView>(new FileView(initPath)),
                 std::unique_ptr<FileView>(new FileView(initPath)),
                 std::unique_ptr<FileView>(new FileView(initPath))}),
     preView_(fileViews_[0] -> getCurrentFileInfo()),
-    currentFileView_(0) {
+    currentFileView_(0), pickerMode_(pickerMode) {
     tmpFileName_ = TMP_FILENAME;
+    pickerOutput_ = tilde2home(filename);
   }
 
   ~Minase() {
@@ -2888,6 +2896,12 @@ private:
       selectFile();
       break;
 
+    case TB_KEY_ENTER:
+      if(pickerMode_ != PICKER_NONE) {
+        if(picker()) return(false);
+      }
+      break;
+
     case TB_KEY_PGDN:
     case TB_KEY_CTRL_D:
       fileViews_[currentFileView_] -> cursorPgDn();
@@ -3127,6 +3141,40 @@ private:
     };
 
     return true;
+  }
+
+  bool picker() {
+    FILE *fp;
+
+    if(pickerMode_ == PICKER_FILES) {
+      auto selectFiles = fileViews_[currentFileView_] -> getSelectFiles();
+      if(!selectFiles.empty()) {
+        if((fp = fopen(pickerOutput_.c_str(), "w")) != NULL) {
+          for(const auto& f: selectFiles) {
+            fprintf(fp, "%s\n", f.c_str());
+          }
+          fclose(fp);
+        }
+        return true;
+      }
+    }
+
+    if(!fileViews_[currentFileView_] -> isFileListEmpty()) {
+      auto file = fileViews_[currentFileView_] -> getCurrentFileInfo();
+      if((pickerMode_ == PICKER_FILE && !file.isDir()) ||
+         (pickerMode_ == PICKER_DIR && file.isDir()) ||
+         (pickerMode_ == PICKER_FILES)) {
+
+        if((fp = fopen(pickerOutput_.c_str(), "w")) != NULL) {
+          fprintf(fp, "%s\n", file.getFilePath().c_str());
+          fclose(fp);
+        }
+
+        return true;
+      }
+    }
+
+    return false;
   }
 
   void execPlugin(const Config::Plugin& plugin) {
@@ -3819,12 +3867,17 @@ private:
   Buffer buffer_;
   int currentFileView_;
   std::string tmpFileName_;
+  PickerMode pickerMode_;
+  std::string pickerOutput_;
 };
 
 int main(int argc, char **argv)
 {
   cmdline::parser parser;
 
+  parser.add<std::string>("choosefile", 0, "file chooser", false, "");
+  parser.add<std::string>("choosefiles", 0, "multiple files", false, "");
+  parser.add<std::string>("choosedir", 0, "directory chooser", false, "");
   parser.add("help", 0, "print this message");
   parser.footer("path");
   bool ok = parser.parse(argc, argv);
@@ -3890,7 +3943,22 @@ int main(int argc, char **argv)
     free(currentPath);
   }
 
-  Minase minase(path);
+  Minase::PickerMode mode = Minase::PICKER_NONE;
+  std::string output;
+  if (!parser.get<std::string>("choosefile").empty()) {
+    mode = Minase::PICKER_FILE;
+    output = parser.get<std::string>("choosefile");
+  }
+  if (!parser.get<std::string>("choosedir").empty()) {
+    mode = Minase::PICKER_DIR;
+    output = parser.get<std::string>("choosedir");
+  }
+  if (!parser.get<std::string>("choosefiles").empty()) {
+    mode = Minase::PICKER_FILES;
+    output = parser.get<std::string>("choosefiles");
+  }
+
+  Minase minase(path, mode, output);
   minase.run();
 
 #ifdef USE_MIGEMO
