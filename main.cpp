@@ -867,8 +867,12 @@ private:
       break;
 
     case SortType::SIZE:
-      func = [](const FileInfo_Ptr& a, const FileInfo_Ptr& b)
-             { return a -> getSize() < b -> getSize(); };
+      func = [](const FileInfo_Ptr& a, const FileInfo_Ptr& b) {
+        if(a -> getSize() == b -> getSize())
+          return a -> getFileName() < b -> getFileName();
+        else
+          return a -> getSize() < b -> getSize();
+      };
       break;
 
     case SortType::DATE:
@@ -876,8 +880,12 @@ private:
                auto at = a -> getMTime();
                auto bt = b -> getMTime();
 
-               if (at.tv_sec == bt.tv_sec)
-                 return at.tv_nsec < bt.tv_nsec;
+               if (at.tv_sec == bt.tv_sec) {
+                 if (at.tv_nsec == bt.tv_nsec)
+                   return a -> getFileName() < b -> getFileName();
+                 else
+                   return at.tv_nsec < bt.tv_nsec;
+               }
                else
                  return at.tv_sec < bt.tv_sec;
              };
