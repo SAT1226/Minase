@@ -1001,7 +1001,8 @@ public:
       return true;
     }
     // .7z
-    if(header[0] == 0xBC && header[1] == 0xAF && header[2] == 0x27 && header[3] == 0x1C) {
+    if(header[0] == 0x37 && header[1] == 0x7A && header[2] == 0xBC && header[3] == 0xAF &&
+       header[4] == 0x27 && header[5] == 0x1C) {
       return true;
     }
     // .rar
