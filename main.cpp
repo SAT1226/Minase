@@ -70,6 +70,15 @@ static std::string getDirName(const std::string& name)
   return "";
 }
 
+static std::string getSuffix(const std::string &name)
+{
+  auto i = name.find_last_of(".");
+
+  if(i == 0) return "";
+  if(i == std::string::npos) return "";
+  return name.substr(i + 1, name.size() - i);
+}
+
 #ifdef USE_MIGEMO
 #include <migemo.h>
 migemo* mgm;
@@ -162,7 +171,8 @@ public:
   Config() : logMaxlines_(100), preViewMaxlines_(50), fileViewType_(0),
              sortType_(0), sortOrder_(0),
              useTrash_(false), wcwidthCJK_(false),
-             nanorcPath_("/usr/share/nano"), opener_("xdg-open")
+             nanorcPath_("/usr/share/nano"), opener_("xdg-open"),
+             archiveMntDir_("~/.config/Minase/mnt")
   {}
 
   bool LoadConfig(const std::string& fileName) {
@@ -183,6 +193,8 @@ public:
     sortType_ = reader.GetInteger("Options", "SortType", 0);
     sortOrder_ = reader.GetInteger("Options", "SortOrder", 0);
     filterType_ = reader.GetInteger("Options", "FilterType", 0);
+    archiveMntDir_ = reader.Get("Options", "ArchiveMntDir", "~/.config/Minase/mnt");
+
 #ifdef USE_MIGEMO
     migemoDict_ = reader.Get("Options", "MigemoDict", DEFAULT_MIGEMO_DICT);
 #endif
@@ -255,7 +267,7 @@ public:
 
             if(basename.length() > 2) op = basename[1];
           }
-          p.silent = (basename.back() != '%');
+          p.silent = (basename.back() == '%');
 
           switch(op) {
           case '0':
@@ -290,6 +302,7 @@ public:
   int getSortType() const { return sortType_; }
   int getSortOrder() const { return sortOrder_; }
   int getFilterType() const { return filterType_; }
+  std::string getArchiveMntDir() const { return archiveMntDir_; }
 #ifdef USE_MIGEMO
   std::string getMigemoDict() const { return migemoDict_; }
 #endif
@@ -308,7 +321,7 @@ private:
   int filterType_;
   bool useTrash_;
   bool wcwidthCJK_;
-  std::string nanorcPath_, opener_;
+  std::string nanorcPath_, opener_, archiveMntDir_;
   std::vector<std::string> bookmarks_;
   std::vector<Plugin> plugins_;
 
@@ -321,13 +334,13 @@ Config config;
 
 int spawn(const std::string& cmd, const std::string& args1,
           const std::string& args2, const std::string& args3,
-          const std::string& dir, bool gui = false, bool silent = true)
+          const std::string& dir, bool gui = false, bool silent = false)
 {
   bool chDir = dir.empty() ? false : true;
   pid_t pid;
 
   if(!gui) {
-    if(silent) tb_shutdown();
+    if(!silent) tb_shutdown();
     pid = fork();
 
     if(pid < 0) return -1;
@@ -349,7 +362,11 @@ int spawn(const std::string& cmd, const std::string& args1,
     waitpid(pid, &stat, 0);
     if(WIFSIGNALED(stat)) printf("\n");
 
-    if(silent) tb_init();
+    if(!silent) tb_init();
+
+    if(WIFEXITED(stat)) {
+      return WEXITSTATUS(stat);
+    }
   }
   else {
     pid = fork();
@@ -463,6 +480,16 @@ int pclose2(pid_t pid)
   return WEXITSTATUS(stat);
 }
 
+bool which(std::string cmd)
+{
+  auto shell = getenv("SHELL");
+  if(shell == 0) return false;
+
+  if(spawn(shell, "-c", "which " + cmd + " > /dev/null", "", "", false, true) == 0)
+    return true;
+  else return false;
+}
+
 class FileInfo {
 public:
   FileInfo(const std::string& path, const std::string& fileName) :
@@ -488,11 +515,8 @@ public:
   std::string getFilePath() const { return path_ + name_; }
   std::string getSuffix() const {
     if(isDir()) return "";
-    auto i = name_.find_last_of(".");
 
-    if(i == 0) return "";
-    if(i == std::string::npos) return "";
-    return name_.substr(i + 1, name_.size() - i);
+    return ::getSuffix(name_);
   }
   bool isDir() const { return dir_; }
   bool isLink() const { return S_ISLNK(lstat_.st_mode); }
@@ -1556,6 +1580,7 @@ private:
     if(syntaxName.empty()) syntaxName = "PlainText";
 
     ret.push_back("[Charset: " + charset + "] - " + syntaxName);
+
     std::string buf;
     std::stringstream ss{txt};
     while(std::getline(ss, buf)){
@@ -2094,13 +2119,15 @@ private:
 
   DirInfo dir_;
   std::string path_, lastPath_;
-  tsl::robin_set<std::string> selectedFiles_;
+  static tsl::robin_set<std::string> selectedFiles_;
   int x_, y_;
   int width_, height_, cursorPos_;
   int oldScrollTop_;
   bool scroll_;
   ViewType viewType_;
 };
+
+tsl::robin_set<std::string> FileView::selectedFiles_;
 
 class FileOperation {
 public:
@@ -2929,6 +2956,10 @@ private:
       ch = 'G';
       break;
 
+    case TB_KEY_CTRL_A:
+      gotoDirectory(config.getArchiveMntDir());
+      break;
+
     case TB_KEY_CTRL_J:
       if(preView_.scrollDown()) preViewDraw = false;
       break;
@@ -2956,6 +2987,11 @@ private:
 
     case TB_KEY_CTRL_SLASH:
       setFileViewFilterType();
+      break;
+
+    case TB_KEY_CTRL_X:
+      pluginMenu();
+      preViewDraw = false;
       break;
 
     case TB_KEY_CTRL_G:
@@ -2995,19 +3031,13 @@ private:
       break;
 
     case '1':
-      currentFileView_ = 0;
-      break;
-
     case '2':
-      currentFileView_ = 1;
-      break;
-
     case '3':
-      currentFileView_ = 2;
-      break;
-
     case '4':
-      currentFileView_ = 3;
+      currentFileView_ = ch - '1';
+      refresh();
+      fileViews_[currentFileView_] -> reload();
+      preViewDraw = false;
       break;
 
     case '!':
@@ -3078,7 +3108,7 @@ private:
         setCursorPos(fileViews_[currentFileView_] -> getFileListCount() - 1);
       break;
 
-    case 'z':
+    case 'Z':
       fileViews_[currentFileView_] ->
         setCursorPos(fileViews_[currentFileView_] -> getCursorPos());
       break;
@@ -3127,6 +3157,10 @@ private:
       fileViews_[currentFileView_] -> clearSelectFiles();
       break;
 
+    case 'U':
+      unmount();
+      break;
+
     case 'j':
       fileViews_[currentFileView_] -> cursorNext();
       break;
@@ -3144,12 +3178,72 @@ private:
       break;
 
     case 'x':
-      pluginMenu();
-      preViewDraw = false;
+      extractArchive();
+      break;
+
+    case 'z':
+      createArchive();
       break;
     };
 
     return true;
+  }
+
+  void createArchive() {
+    auto selectFiles = fileViews_[currentFileView_] -> getSelectFiles();
+    std::string defaultArchiveName;
+    std::string name;
+
+    auto shell = getenv("SHELL");
+    if(shell == 0) {
+      printInfoMessage("SHELL environment variable not set.");
+      return;
+    }
+
+    if(selectFiles.size() == 0) {
+      defaultArchiveName = fileViews_[currentFileView_] -> getCurrentFileName();
+
+      if(fileViews_[currentFileView_] -> getCurrentFileInfo().isDir())
+        defaultArchiveName.pop_back();
+    }
+
+    if(!getReadline("Archive: ", name, defaultArchiveName.c_str())) {
+      if(selectFiles.size() != 0) {
+        FILE* fp;
+        if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
+        for(const auto &f : selectFiles) {
+          auto current = fileViews_[currentFileView_] -> getPath();
+          current.pop_back();
+
+          std::string filename;
+          auto i = f.find(current);
+          if(i == 0) filename = "./" + f.substr(current.length() + 1);
+          else filename = f;
+
+          fprintf(fp, "%s%c", (filename).c_str(), '\0');
+        }
+        fclose(fp);
+
+        std::string cmd;
+        if(getSuffix(name) == "7z") {
+          cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 apack \"" + name + "\"";
+        }
+        else {
+          cmd = "apack --null \"" + name + "\" < \"" + tmpFileName_ + "\"";
+        }
+
+        spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath());
+      }
+      else {
+        std::string cmd = "apack \"" + name + "\" " + "\"" + fileViews_[currentFileView_] -> getCurrentFileName() + "\"";
+        spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath());
+      }
+      fileViews_[currentFileView_] -> update();
+
+      int pos = fileViews_[currentFileView_] -> searchFileName(name);
+      if(pos != -1) fileViews_[currentFileView_] -> setCursorPos(pos);
+      else fileViews_[currentFileView_] -> setCursorPos(0);
+    }
   }
 
   bool picker() {
@@ -3369,11 +3463,161 @@ private:
         if(!fileViews_[currentFileView_] -> setPath(newPath)) printInfoMessage(strerror(errno));
       }
       else {
-        spawn(config.getOpener(),
-              fileViews_[currentFileView_] -> getCurrentFilePath().c_str(),
-              "", "", "", true);
+        FILE* fp;
+        if ((fp = fopen(fileInfo.getFilePath().c_str(), "rb")) != NULL) {
+          auto archive = CheckFileType::isArchive(fp);
+          fclose(fp);
+
+          if(archive) {
+            openArchive();
+            fileViews_[currentFileView_] -> reload();
+            resize();
+          }
+          else {
+            spawn(config.getOpener(),
+                  fileViews_[currentFileView_]->getCurrentFilePath().c_str(),
+                  "", "", "", true);
+          }
+        }
       }
     }
+  }
+
+  void openArchive() {
+    auto c = getInput("'o'pen / e'x'tract / 'l's / 'm'nt");
+    auto shell = getenv("SHELL");
+    if(shell == 0) {
+      printInfoMessage("SHELL environment variable not set.");
+      return;
+    }
+
+    if(c == 'o') {
+      spawn(config.getOpener(),
+                  fileViews_[currentFileView_]->getCurrentFilePath().c_str(),
+                  "", "", "", true);
+    }
+    else if(c == 'l') {
+      auto lsar = which("lsar");
+      auto bsdtar = which("bsdtar");
+      if(!lsar && !bsdtar) {
+        printInfoMessage("install 'lsar' or 'bsdtar'");
+        return;
+      }
+
+      std::string cmd;
+      if(lsar)
+        cmd = "lsar -l \"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\" | less";
+      else if(bsdtar)
+        cmd = "bsdtar tfv \"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\" | less";
+
+      spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath());
+    }
+    else if(c == 'x') {
+      extractArchive(true);
+    }
+    else if(c == 'm') {
+      if(!which("archivemount")) {
+        printInfoMessage("install 'archivemount'");
+        return;
+      }
+
+      std::string archiveMntDir = tilde2home(config.getArchiveMntDir());
+      std::string mntdir = archiveMntDir + "/" + fileViews_[currentFileView_]->getCurrentFileName();
+      struct stat stat_buf;
+      if(lstat(archiveMntDir.c_str(), &stat_buf) != 0) {
+        std::string cmd = "mkdir -p \"" + archiveMntDir + "\" > /dev/null 2>&1";
+        spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath(), false, true);
+      }
+
+      if(mkdir(mntdir.c_str(), 0777) == -1) {
+        printInfoMessage(mntdir + " : " + strerror(errno));
+        return;
+      }
+
+      std::string cmd = "archivemount \"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\" \"" + mntdir + "\" > /dev/null 2>&1";
+      if(spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath(), false, true) != 0) {
+        printInfoMessage("archivemount failed: " + mntdir);
+        rmdir(mntdir.c_str());
+      }
+      else printInfoMessage("archivemount: " + mntdir);
+    }
+  }
+
+  void unmount() {
+    auto shell = getenv("SHELL");
+    if(shell == 0) {
+      printInfoMessage("SHELL environment variable not set.");
+      return;
+    }
+
+    std::string cmd;
+    if(which("fusermount3"))
+      cmd = "fusermount3 -u \"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\" > /dev/null 2>&1";
+    else if(which("fusermount"))
+      cmd = "fusermount -u \"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\" > /dev/null 2>&1";
+    else {
+      printInfoMessage("install 'fusermount3' or 'fusermount'");
+      return;
+    }
+
+    if(spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath(), false, true) != 0) {
+      printInfoMessage("fusermount3 failed!");
+    }
+    else {
+      rmdir(fileViews_[currentFileView_]->getCurrentFilePath().c_str());
+    }
+    fileViews_[currentFileView_] -> reload();
+    resize();
+  }
+
+  void extractArchive(bool currentOnly = false) {
+    auto shell = getenv("SHELL");
+    if(shell == 0) {
+      printInfoMessage("SHELL environment variable not set.");
+      return;
+    }
+
+    auto unar = which("unar");
+    auto bsdtar = which("bsdtar");
+    if(!unar && !bsdtar) {
+      printInfoMessage("install 'unar' or 'bsdtar'");
+      return;
+    }
+
+    auto selectFiles = fileViews_[currentFileView_] -> getSelectFiles();
+    std::string cmd;
+    if(currentOnly || selectFiles.size() == 0) {
+      std::string dir = "./";
+
+      if(unar)
+        cmd = "unar -o \"" + dir + "\" " + "\"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\"";
+      else if(bsdtar)
+        cmd = "bsdtar -C \"" + dir + "\" -xvf " + "\"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\"";
+    }
+    else {
+      FILE* fp;
+      if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
+      for(const auto &f : selectFiles) {
+        fprintf(fp, "%s%c", f.c_str(), '\0');
+      }
+      fclose(fp);
+
+      if(unar) {
+        cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 -n 1 unar ";
+      }
+      else if(bsdtar) {
+        cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 -n 1 bsdtar -xvf ";
+      }
+    }
+
+    tb_shutdown();
+    spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath(), false, true);
+    printf("\e[7mPress Enter key!!\n\e[0m");
+    getchar();
+    tb_init();
+
+    fileViews_[currentFileView_] -> reload();
+    resize();
   }
 
   bool toggleExecutePermission() {

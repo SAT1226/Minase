@@ -30,8 +30,11 @@ optional:
 * libsixel
 * trash-cli
 * vidir
-* lsar or bsdtar
+* unar or bsdtar
 * cmigemo
+* atool
+* archivemount
+* fusermount3 or fusermount
 
 ## Usage
 |Keys|Description|
@@ -58,7 +61,8 @@ optional:
 |,| FileView simple/detail|
 |.| Show/Hide dot files|
 |i| Enable/Disable image preview|
-|z| Current line to the middle of the screen|
+|z| Arcive|
+|Z| Current line to the middle of the screen|
 |s| Sort files|
 |e| Edit File|
 |Space| Mark file|
@@ -75,11 +79,14 @@ optional:
 |b| Open Bookmarks|
 |/| Filter|
 |^/| Change Filter type|
-|x| Run Plugin |
+|x| Unarchive|
+|^x| Run Plugin |
 |Alt + key| Run Plugin |
 |*| Toggle execute permission|
 |^j| scrolldown in preview|
 |^k| scrollup in preview|
+|U| Unmouont Directory|
+|^a| Go to archive mount directory|
 
 Quit and cd:
 ```

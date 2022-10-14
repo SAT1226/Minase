@@ -57,7 +57,8 @@ optional:
 |,| ファイルリストを simple/detail 表示に切り替え|
 |.| ドットファイルの表示/非表示|
 |i| イメージプレビューの有効/無効|
-|z| 現在の行を画面の中心に|
+|z| アーカイブを作成|
+|Z| 現在の行を画面の中心に|
 |s| ソート項目の変更|
 |e| ファイルを編集|
 |Space| ファイルをマーク|
@@ -75,10 +76,12 @@ optional:
 |/| フィルター|
 |^/| フィルターの種類を変更|
 |*| 実行属性をトグルする|
-|x| pluginを実行|
+|x| アーカイブを解凍|
+|^x| pluginを実行|
 |Alt + key| pluginを実行|
 |^j| プレビュー画面を下にスクロール|
 |^k| プレビュー画面を上にスクロール|
+|^a| アーカイブマウントディレクトリへ移動|
 終了時にcdするには:
 ```
  $ minase; if [ -f ~/.config/Minase/lastdir ]; then cd "`cat ~/.config/Minase/lastdir`"; rm ~/.config/Minase/lastdir; fi;
