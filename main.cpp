@@ -3641,7 +3641,12 @@ private:
   bool renameFile() {
     if(fileViews_[currentFileView_] -> isFileListEmpty()) return false;
     std::string name;
-    if(!getReadline("Rename: ", name, fileViews_[currentFileView_] -> getCurrentFileName().c_str())) {
+    std::string defaultName = fileViews_[currentFileView_] -> getCurrentFileName();
+
+    if(fileViews_[currentFileView_] -> getCurrentFileInfo().isDir())
+      defaultName.pop_back();
+
+    if(!getReadline("Rename: ", name, defaultName.c_str())) {
       if(fileOperation_.renameFile(fileViews_[currentFileView_] -> getPath(),
                                    fileViews_[currentFileView_] -> getCurrentFileName(),
                                    name)) {
