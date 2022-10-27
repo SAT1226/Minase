@@ -39,6 +39,7 @@ public:
 
     const std::vector<HighlightRule>& hlRuleList = hightlightList_[n].highlightRuleList;
     for(size_t i = 0; i < hlRuleList.size(); ++i) {
+      if(hlRuleList[i].regex.empty()) continue;
       if(hlRuleList[i].regex.front() == '"' && hlRuleList[i].regex.back() == '"') {
         auto rStr = hlRuleList[i].regex.substr(1, hlRuleList[i].regex.length() - 2);
 
@@ -109,8 +110,8 @@ public:
         auto str = std::string(rbuf);
 
         // remove crlf
-        if(str.back() == '\n') str.pop_back();
-        if(str.back() == '\r') str.pop_back();
+        if(!str.empty() && str.back() == '\n') str.pop_back();
+        if(!str.empty() && str.back() == '\r') str.pop_back();
         str.push_back('\n');
 
         txt += str;
@@ -227,7 +228,7 @@ private:
 
         auto rstr = getSurroundDoubleQuotation(regex);
         regcomp(&re, rstr.c_str(),
-                REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+                REG_EXTENDED|REG_NOSUB|REG_ICASE);
 
         if(regexec(&re, fileName.c_str(), 0, m, 0) != REG_NOMATCH) {
           n = i;
@@ -246,7 +247,7 @@ private:
 
           auto rstr = getSurroundDoubleQuotation(hightlightList_[i].headerRegex);
           regcomp(&re, rstr.c_str(),
-                  REG_EXTENDED|REG_NEWLINE|REG_NOSUB|REG_ICASE);
+                  REG_EXTENDED|REG_NOSUB|REG_ICASE);
 
           if(regexec(&re, header.c_str(), 0, m, 0) != REG_NOMATCH) {
             n = i;

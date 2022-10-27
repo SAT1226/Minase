@@ -212,8 +212,8 @@ public:
       if(fgets(buf, sizeof(buf), fp) != 0) {
         std::string bookmark(buf);
 
-        if(bookmark.back() == '\n') bookmark.pop_back();
-        if(bookmark.back() == '\r') bookmark.pop_back();
+        if(!bookmark.empty() && bookmark.back() == '\n') bookmark.pop_back();
+        if(!bookmark.empty() && bookmark.back() == '\r') bookmark.pop_back();
 
         bookmarks_.emplace_back(bookmark);
       }
@@ -1195,10 +1195,10 @@ public:
   std::string removeLF(const std::string &src) const {
     std::string dest = src;
 
-    if(dest.back() == '\n') {
+    if(!dest.empty() && dest.back() == '\n') {
       dest.pop_back();
     }
-    if(dest.back() == '\r') {
+    if(!dest.empty() && dest.back() == '\r') {
       dest.pop_back();
     }
 
@@ -1533,9 +1533,9 @@ private:
         }
 
         // Remove CRLF
-        if(txt.back() == '\n') txt.pop_back();
+        if(!txt.empty() && txt.back() == '\n') txt.pop_back();
         else if(!feof(fp)) continue;
-        if(txt.back() == '\r') txt.pop_back();
+        if(!txt.empty() && txt.back() == '\r') txt.pop_back();
 
         txt.push_back('\n');
       }
@@ -2658,7 +2658,7 @@ public:
       if(i + scrollTop == cursor) color = TB_REVERSE;
       if(i + scrollTop < static_cast<int>(menuItems.size())) {
         auto txt = menuItems[i + scrollTop];
-        if(txt.back() == '\n') txt.pop_back();
+        if(!txt.empty() && txt.back() == '\n') txt.pop_back();
 
         drawText(tb_width() / 2 + 2, i + 2, txt, color);
       }
@@ -2778,7 +2778,7 @@ public:
     for(int i = 0; i < tb_height() - 2; ++i) {
       if(i + line < static_cast<int>(logText.size())) {
         auto txt = logText[i + line];
-        if(txt.back() == '\n') txt.pop_back();
+        if(!txt.empty() && txt.back() == '\n') txt.pop_back();
 
         if(txt == "") {
           for(int j = 0; j < tb_width(); ++j)
