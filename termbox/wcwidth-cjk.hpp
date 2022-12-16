@@ -29,6 +29,8 @@
 #ifndef WCWIDTH_CJK_HPP
 #define WCWIDTH_CJK_HPP
 
+#include <wchar.h>
+
 struct interval {
   wchar_t first;
   wchar_t last;
@@ -53,6 +55,7 @@ static int bisearch(wchar_t ucs, const struct interval *table, int max) {
 
   return 0;
 }
+
 
 /* The following two functions define the column width of an ISO 10646
  * character as follows:
@@ -177,6 +180,21 @@ int wcwidth_ucs(wchar_t ucs)
       (ucs >= 0x30000 && ucs <= 0x3fffd)));
 }
 
+#if 0 /* original */
+int wcswidth_ucs(const wchar_t *pwcs, size_t n)
+{
+  int w, width = 0;
+
+  for (;*pwcs && n-- > 0; pwcs++)
+    if ((w = wcwidth_ucs(*pwcs)) < 0)
+      return -1;
+    else
+      width += w;
+
+  return width;
+}
+#endif
+
 /*
  * The following functions are the same as wcwidth_ucs() and
  * wcwidth_cjk(), except that spacing characters in the East Asian
@@ -192,6 +210,14 @@ int wcwidth_ucs(wchar_t ucs)
  * (Neutral) category as defined in Unicode Technical Report #11
  * actually have a column width of 2 in CJK legacy encodings.
  */
+
+//#define wcwidth_cjk wcwidth
+//#define wcswidth_cjk wcswidth
+
+/* For FreeBSD: wcwidth() is implemented as an inline function */
+#ifdef wcwidth
+#  undef wcwidth
+#endif
 
 int wcwidth_cjk(wchar_t ucs)
 {
@@ -270,6 +296,17 @@ int wcwidth_cjk(wchar_t ucs)
     return 2;
 #endif /* JA_LEGACY */
 
+//#ifdef EMOJI
+  static const struct interval emoji[] = {
+    { 0x2600, 0x27BF },
+    { 0x1F300, 0x1F64F }, { 0x1F680, 0x1F6FF }, { 0x1F900, 0x1F9FF },
+  };
+
+  if (bisearch(ucs, emoji,
+              sizeof(emoji) / sizeof(struct interval) - 1))
+    return 2;
+//#endif /* EMOJI */
+
   return wcwidth_ucs(ucs);
 }
 
@@ -285,4 +322,5 @@ int wcswidth_cjk(const wchar_t *pwcs, size_t n)
 
   return width;
 }
+
 #endif
