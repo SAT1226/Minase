@@ -82,6 +82,8 @@ optional:
 |^j| プレビュー画面を下にスクロール|
 |^k| プレビュー画面を上にスクロール|
 |^a| アーカイブマウントディレクトリへ移動|
+|?| ヘルプを表示|
+
 終了時にcdするには:
 ```
  $ minase; if [ -f ~/.config/Minase/lastdir ]; then cd "`cat ~/.config/Minase/lastdir`"; rm ~/.config/Minase/lastdir; fi;

@@ -87,6 +87,7 @@ optional:
 |^k| scrollup in preview|
 |U| Unmouont Directory|
 |^a| Go to archive mount directory|
+|?| Help|
 
 Quit and cd:
 ```

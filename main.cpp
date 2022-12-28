@@ -41,6 +41,7 @@
 #include "NanoSyntaxHighlight.hpp"
 #include "ImageUtil.hpp"
 #include "TermboxUtil.hpp"
+#include "help.hpp"
 
 const static int TAB_MAX = 4;
 static const char* const TMP_FILENAME = "/tmp/minase_tmp";
@@ -3184,9 +3185,21 @@ private:
     case 'z':
       createArchive();
       break;
+    case '?':
+      showHelp();
+      break;
     };
 
     return true;
+  }
+
+  void showHelp() {
+    FILE* fp;
+    if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
+    fprintf(fp, "%s", (char*)helpstr);
+    fclose(fp);
+
+    spawn("less", tmpFileName_, "", "", "");
   }
 
   void createArchive() {
