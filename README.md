@@ -137,6 +137,19 @@ SortOrder = 1
 
 ; 0: Normal / 1: Regexp / 2: Migemo
 FilterType = 0
+
+; ArchiveMntDir
+;ArchiveMntDir = ~/.config/Minase/mnt
+
+; CustomCopy
+;CustomCopy = advcp -vgrp
+
+; CustomMove
+;CustomMove = advmv -vg
+
+; CustomRenamer
+;CustomRenamer = massren
+;CustomRenamer = mmv *
 ```
 
 ~/.config/Minase/bookmarks    

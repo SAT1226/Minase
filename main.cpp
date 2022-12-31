@@ -5,6 +5,7 @@
 #include <atomic>
 #include <deque>
 #include <queue>
+#include <string>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -195,6 +196,9 @@ public:
     sortOrder_ = reader.GetInteger("Options", "SortOrder", 0);
     filterType_ = reader.GetInteger("Options", "FilterType", 0);
     archiveMntDir_ = reader.Get("Options", "ArchiveMntDir", "~/.config/Minase/mnt");
+    customCopy_ = reader.Get("Options", "CustomCopy", "");
+    customMove_ = reader.Get("Options", "CustomMove", "");
+    customRenamer_ = reader.Get("Options", "CustomRenamer", "");
 
 #ifdef USE_MIGEMO
     migemoDict_ = reader.Get("Options", "MigemoDict", DEFAULT_MIGEMO_DICT);
@@ -313,6 +317,9 @@ public:
   std::string getOpener() const { return opener_; }
   std::vector<std::string> getBookmarks() const { return bookmarks_; }
   std::vector<Plugin> getPlugins() const { return plugins_; }
+  std::string getCustomCopy() const { return customCopy_; }
+  std::string getCustomMove() const { return customMove_; }
+  std::string getCustomRenamer() const { return customRenamer_; }
 
 private:
   int logMaxlines_;
@@ -325,6 +332,7 @@ private:
   std::string nanorcPath_, opener_, archiveMntDir_;
   std::vector<std::string> bookmarks_;
   std::vector<Plugin> plugins_;
+  std::string customCopy_, customMove_, customRenamer_;
 
 #ifdef USE_MIGEMO
   std::string migemoDict_;
@@ -2970,7 +2978,16 @@ private:
       break;
 
     case TB_KEY_CTRL_R:
-      spawn("vidir", "", "", "", fileViews_[currentFileView_] -> getPath());
+      if(config.getCustomRenamer().empty()) {
+        spawn("vidir", "", "", "", fileViews_[currentFileView_] -> getPath());
+      }
+      else {
+        auto shell = getShell();
+        if(shell != "") {
+          spawn(shell, "-c", config.getCustomRenamer(), "", fileViews_[currentFileView_]->getPath());
+        }
+      }
+
       fileViews_[currentFileView_] -> reload();
       resize();
       preViewDraw = false;
@@ -3043,10 +3060,8 @@ private:
 
     case '!':
       {
-        auto shell = getenv("SHELL");
-
-        if(shell == 0) printInfoMessage("SHELL environment variable not set.");
-        else {
+        auto shell = getShell();
+        if(shell != "") {
           spawn(shell, "", "", "",
                 fileViews_[currentFileView_] -> getPath());
           resize();
@@ -3193,6 +3208,27 @@ private:
     return true;
   }
 
+  bool selectFilesToTempFile(const std::vector<std::string>& selectFiles, char c) const {
+    FILE* fp;
+    if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return false;
+
+    for(const auto& f: selectFiles) {
+      fprintf(fp, "%s%c", f.c_str(), c);
+    }
+    fclose(fp);
+
+    return true;
+  }
+
+  std::string getShell() const {
+    auto shell = getenv("SHELL");
+    if(shell == 0) {
+      printInfoMessage("SHELL environment variable not set.");
+      return "";
+    }
+    return shell;
+  }
+
   void showHelp() {
     FILE* fp;
     if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
@@ -3207,11 +3243,8 @@ private:
     std::string defaultArchiveName;
     std::string name;
 
-    auto shell = getenv("SHELL");
-    if(shell == 0) {
-      printInfoMessage("SHELL environment variable not set.");
-      return;
-    }
+    auto shell = getShell();
+    if(shell == "") return;
 
     if(selectFiles.size() == 0) {
       defaultArchiveName = fileViews_[currentFileView_] -> getCurrentFileName();
@@ -3295,15 +3328,7 @@ private:
 
   void execPlugin(const Config::Plugin& plugin) {
     std::string filepath = tilde2home(plugin.filePath);
-
-    FILE* fp;
-    if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
-
-    auto selectFiles = fileViews_[currentFileView_] -> getSelectFiles();
-    for(const auto& f: selectFiles) {
-      fprintf(fp, "%s\n", f.c_str());
-    }
-    fclose(fp);
+    selectFilesToTempFile(fileViews_[currentFileView_] -> getSelectFiles(), '\n');
 
     std::string text;
     if(plugin.inputText) {
@@ -3498,11 +3523,8 @@ private:
 
   void openArchive() {
     auto c = getInput("'o'pen / e'x'tract / 'l's / 'm'nt");
-    auto shell = getenv("SHELL");
-    if(shell == 0) {
-      printInfoMessage("SHELL environment variable not set.");
-      return;
-    }
+    auto shell = getShell();
+    if(shell == "") return;
 
     if(c == 'o') {
       spawn(config.getOpener(),
@@ -3557,11 +3579,8 @@ private:
   }
 
   void unmount() {
-    auto shell = getenv("SHELL");
-    if(shell == 0) {
-      printInfoMessage("SHELL environment variable not set.");
-      return;
-    }
+    auto shell = getShell();
+    if(shell == "") return;
 
     std::string cmd;
     if(which("fusermount3"))
@@ -3584,11 +3603,8 @@ private:
   }
 
   void extractArchive(bool currentOnly = false) {
-    auto shell = getenv("SHELL");
-    if(shell == 0) {
-      printInfoMessage("SHELL environment variable not set.");
-      return;
-    }
+    auto shell = getShell();
+    if(shell == "") return;
 
     auto unar = which("unar");
     auto bsdtar = which("bsdtar");
@@ -3608,12 +3624,7 @@ private:
         cmd = "bsdtar -C \"" + dir + "\" -xvf " + "\"" + fileViews_[currentFileView_]->getCurrentFilePath() + "\"";
     }
     else {
-      FILE* fp;
-      if((fp = fopen(tmpFileName_.c_str(), "w")) == NULL) return;
-      for(const auto &f : selectFiles) {
-        fprintf(fp, "%s%c", f.c_str(), '\0');
-      }
-      fclose(fp);
+      selectFilesToTempFile(selectFiles, '\0');
 
       if(unar) {
         cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 -n 1 unar ";
@@ -3758,25 +3769,54 @@ private:
   }
 
   bool pasteFiles() {
+    auto shell = getShell();
+    if(shell.empty()) return false;
+
     if(!buffer_.selectedFiles.empty()) {
-      if(buffer_.operation == FileOperation::Task::FILE_COPY ||
-         buffer_.operation == FileOperation::Task::FILE_MOVE) {
-        fileOperation_.startTask();
+      if(buffer_.operation == FileOperation::Task::FILE_COPY) {
+        if(config.getCustomCopy().empty()) {
+          fileOperation_.startTask();
 
-        for(const auto& file: buffer_.selectedFiles) {
-          if(buffer_.operation == FileOperation::Task::FILE_COPY)
+          for(const auto& file: buffer_.selectedFiles) {
             fileOperation_.copyFile(file, fileViews_[currentFileView_] -> getPath());
-          else if(buffer_.operation == FileOperation::Task::FILE_MOVE)
-            fileOperation_.moveFile(file, fileViews_[currentFileView_] -> getPath());
+          }
+          fileOperation_.reloadPath(fileViews_[currentFileView_] -> getPath());
+          return true;
         }
-        fileOperation_.reloadPath(fileViews_[currentFileView_] -> getPath());
+        else {
+          if(!selectFilesToTempFile(buffer_.selectedFiles, '\0')) return false;
+          auto cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 -I {} " + config.getCustomCopy() + " {} " + fileViews_[currentFileView_] -> getPath();
+          spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath());
 
-        if(buffer_.operation == FileOperation::Task::FILE_MOVE) {
+          fileViews_[currentFileView_] -> reload();
+          resize();
+          return true;
+        }
+      }
+      if(buffer_.operation == FileOperation::Task::FILE_MOVE) {
+        if(config.getCustomMove().empty()) {
+          fileOperation_.startTask();
+
+          for(const auto& file: buffer_.selectedFiles) {
+            fileOperation_.moveFile(file, fileViews_[currentFileView_] -> getPath());
+          }
+          fileOperation_.reloadPath(fileViews_[currentFileView_] -> getPath());
+
           buffer_.selectedFiles.clear();
           buffer_.operation = FileOperation::Task::NONE;
+          return true;
         }
+        else {
+          if(!selectFilesToTempFile(buffer_.selectedFiles, '\0')) return false;
+          auto cmd = "cat \"" + tmpFileName_ + "\" | xargs -0 -I {} " + config.getCustomMove() + " {} " + fileViews_[currentFileView_] -> getPath();
+          spawn(shell, "-c", cmd, "", fileViews_[currentFileView_]->getPath());
 
-        return true;
+          fileViews_[currentFileView_] -> reload();
+          resize();
+
+          buffer_.selectedFiles.clear();
+          return true;
+        }
       }
     }
 
