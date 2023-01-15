@@ -17,6 +17,7 @@ Minase is terminal file manager.
 * Batch rename (needs vidir)
 * UTF-8 support
 * Fix "East Asian Ambiguous Width Characters" problem (use wcwidth-cjk)
+* Icon support using a patched nerd font
 
 ## System Requirements
 * Linux
@@ -150,6 +151,9 @@ FilterType = 0
 ; CustomRenamer
 ;CustomRenamer = massren
 ;CustomRenamer = mmv *
+
+; Icon
+;UseIcon = true
 ```
 
 ~/.config/Minase/bookmarks    

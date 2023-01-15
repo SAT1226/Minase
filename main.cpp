@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -43,6 +44,7 @@
 #include "ImageUtil.hpp"
 #include "TermboxUtil.hpp"
 #include "help.hpp"
+#include "icons.hpp"
 
 const static int TAB_MAX = 4;
 static const char* const TMP_FILENAME = "/tmp/minase_tmp";
@@ -199,6 +201,7 @@ public:
     customCopy_ = reader.Get("Options", "CustomCopy", "");
     customMove_ = reader.Get("Options", "CustomMove", "");
     customRenamer_ = reader.Get("Options", "CustomRenamer", "");
+    icon_ = reader.GetBoolean("Options", "UseIcon", false);
 
 #ifdef USE_MIGEMO
     migemoDict_ = reader.Get("Options", "MigemoDict", DEFAULT_MIGEMO_DICT);
@@ -320,6 +323,7 @@ public:
   std::string getCustomCopy() const { return customCopy_; }
   std::string getCustomMove() const { return customMove_; }
   std::string getCustomRenamer() const { return customRenamer_; }
+  bool useIcon() const { return icon_; }
 
 private:
   int logMaxlines_;
@@ -329,6 +333,7 @@ private:
   int filterType_;
   bool useTrash_;
   bool wcwidthCJK_;
+  bool icon_;
   std::string nanorcPath_, opener_, archiveMntDir_;
   std::vector<std::string> bookmarks_;
   std::vector<Plugin> plugins_;
@@ -1112,6 +1117,31 @@ public:
   }
 };
 
+static std::string getIcon(const FileInfo& fileinfo)
+{
+  std::string ret;
+
+  if(fileinfo.isDir()) {
+    return dirIcon.icon;
+  }
+  else {
+    for(size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i) {
+      auto suffix = fileinfo.getSuffix();
+      std::transform(suffix.cbegin(), suffix.cend(), suffix.begin(), tolower);
+      if(suffix == icons[i].match) return icons[i].icon;
+    }
+
+    if(fileinfo.isExe()) {
+      return exeIcon.icon;
+    }
+    else {
+      return fileIcon.icon;
+    }
+  }
+
+  return ret;
+}
+
 class PreView {
 public:
   PreView(const FileInfo& fileInfo) :
@@ -1432,26 +1462,34 @@ private:
 
     for(int i = 0; i < maxCount; ++i) {
       auto f = dir.at(i);
-      if(f.isDir()) {
-        if(f.isLink())
-          result.emplace_back("\e[36;1m" + f.getFileName());
-        else
-          result.emplace_back("\e[34;1m" + f.getFileName());
-      }
-      else if(f.isExe()) {
-        result.emplace_back("\e[32;1m" + f.getFileName());
-      }
-      else if(f.isFifo()) {
-        result.emplace_back("\e[33m" + f.getFileName());
-      }
-      else if(f.isSock()) {
-        result.emplace_back("\e[35;1m" + f.getFileName());
-      }
-      else if(f.isLink()) {
-        result.emplace_back("\e[36;1m" + f.getFileName());
+      std::string filename;
+      if(config.useIcon()) {
+        filename = getIcon(f) + " " + f.getFileName();
       }
       else {
-        result.emplace_back(f.getFileName());
+        filename = f.getFileName();
+      }
+
+      if(f.isDir()) {
+        if(f.isLink())
+          result.emplace_back("\e[36;1m" + filename);
+        else
+          result.emplace_back("\e[34;1m" + filename);
+      }
+      else if(f.isExe()) {
+        result.emplace_back("\e[32;1m" + filename);
+      }
+      else if(f.isFifo()) {
+        result.emplace_back("\e[33m" + filename);
+      }
+      else if(f.isSock()) {
+        result.emplace_back("\e[35;1m" + filename);
+      }
+      else if(f.isLink()) {
+        result.emplace_back("\e[36;1m" + filename);
+      }
+      else {
+        result.emplace_back(filename);
       }
 
       if(kill_) return result;
@@ -2088,7 +2126,13 @@ public:
 
   std::string strimFileName(const FileInfo& fileInfo, int w, int* len = 0) const {
     int llen;
-    auto result = strimwidth(fileInfo.getFileName(), w, &llen);
+    std::string result;
+    if(config.useIcon()) {
+      result = strimwidth(getIcon(fileInfo) + " " + fileInfo.getFileName(), w, &llen);
+    }
+    else {
+      result = strimwidth(fileInfo.getFileName(), w, &llen);
+    }
 
     if(result.length() - 1 < fileInfo.getFileName().length()) {
       auto suffix = fileInfo.getSuffix();

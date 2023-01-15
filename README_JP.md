@@ -16,6 +16,7 @@ Minaseはターミナルで動くファイラーです
 * バッチリネーム (vidirが必要)
 * UTF-8 に対応
 * "East Asian Ambiguous Width Characters"問題を修正 (wcwidth-cjkを使います)
+* Nerd Fontsを使ったアイコン表示
 
 ## System Requirements
 * Linux
@@ -144,6 +145,9 @@ FilterType = 0
 ; CustomRenamer
 ;CustomRenamer = massren
 ;CustomRenamer = mmv *
+
+; Icon
+;UseIcon = true
 ```
 
 ~/.config/Minase/bookmarks    
