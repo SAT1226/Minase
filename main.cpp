@@ -4283,6 +4283,7 @@ int main(int argc, char **argv)
 
   if(parser.rest().size() > 0) {
     path = parser.rest()[0];
+    path = realpath(path.c_str(), NULL);
     if(path.at(path.size() - 1) != '/') {
       path += "/";
     }
